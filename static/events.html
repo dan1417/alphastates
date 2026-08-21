@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Events | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/events.css">
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+    <script src="/static/js/events.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div class="container" x-data="eventsApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>📊 Events Dashboard</h1>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a href="/addresses" class="back-link">🏷️ Manage Addresses</a>
+                    </div>
+                </div>
+                <div class="header-controls">
+                    <span x-show="userEmail" style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 1rem;" x-text="userEmail"></span>
+                    <button onclick="logout()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Connection Status Card -->
+            <div class="card status-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h3 style="margin: 0 0 0.5rem 0;">Connection Status</h3>
+                        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                            <div class="status-indicator">
+                                <span class="status-dot" :class="wsConnected ? 'connected' : 'disconnected'"></span>
+                                <span x-text="wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'"></span>
+                            </div>
+                            <div class="status-info">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">Latest Block:</span>
+                                <strong x-text="latestBlock || 'Loading...'"></strong>
+                            </div>
+                            <div class="status-info">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">Trade Events:</span>
+                                <strong x-text="totalTradeEvents"></strong>
+                            </div>
+                            <div class="status-info">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">Transfer Events:</span>
+                                <strong x-text="totalTransferEvents"></strong>
+                            </div>
+                            <div class="status-info" x-show="'Notification' in window && Notification.permission === 'granted'">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">Notifications:</span>
+                                <strong x-text="notificationsEnabled ? '✅ On' : '⭕ Off'" :style="notificationsEnabled ? 'color: #10b981;' : 'color: #6b7280;'"></strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button @click="reconnectWebSocket" class="btn-secondary" :disabled="wsConnected">
+                            🔄 Reconnect
+                        </button>
+                        <button @click="clearEvents" class="btn-secondary">
+                            🗑️ Clear
+                        </button>
+                        <button @click="toggleNotifications" class="btn-secondary" :title="getNotificationStatusTitle()">
+                            <span x-text="getNotificationButtonText()"></span>
+                        </button>
+                        <button @click="openNotificationSettings" class="btn-secondary" title="Customize notification criteria">
+                            ⚙️ Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Events List -->
+            <div class="card">
+                <div class="section-header-row events-stream-header" style="margin-bottom: 1rem;">
+                    <h3 style="margin: 0; color: #d1d5db; font-size: 1.1rem;">Events Stream</h3>
+                    <span class="events-stream-header-right" :class="{ 'time-elapsed-pulse': lastBlockAt && timeSinceLastBlockSeconds > 6 }" x-show="lastBlockNumber != null || lastBlockAt || oppWsBaseUrlSet">
+                        <span x-show="oppWsBaseUrlSet" class="opp-ws-status" :class="oppWsConnected ? 'opp-ws-connected' : 'opp-ws-disconnected'">
+                            <span class="opp-ws-dot" :class="oppWsConnected ? 'connected' : 'disconnected'"></span>
+                            <span x-text="oppWsConnected ? 'Opp' : 'Opp (disconnected)'"></span>
+                        </span>
+                        <span x-show="lastBlockNumber != null" style="font-size: 0.85rem; color: #9ca3af;">Latest Block #<span x-text="lastBlockNumber"></span></span>
+                        <span x-show="lastBlockAt" style="font-size: 0.85rem; color: #9ca3af;">Time Elapsed: <span x-text="timeSinceLastBlockSeconds.toFixed(2)"></span> s</span>
+                    </span>
+                </div>
+                
+                <!-- Loading State -->
+                <div x-show="loading" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Loading events...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="!loading && filteredTradeBlocks.length === 0 && filteredTransferBlocks.length === 0 && pendingExtrinsics.length === 0 && failedTrades.length === 0 && !failedTradesLoading" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
+                    <p>No events found</p>
+                    <p style="font-size: 0.875rem; margin-top: 0.5rem;">Events will appear here as they happen on the blockchain</p>
+                </div>
+
+                <!-- Five Column Layout -->
+                <div x-show="!loading && (filteredTradeBlocks.length > 0 || filteredTransferBlocks.length > 0 || pendingExtrinsics.length > 0 || failedTrades.length > 0 || failedTradesLoading)" class="events-grid">
+                    <!-- Transfer Events Column -->
+                    <div class="events-column" x-show="!hiddenSections.transfer">
+                        <div class="section-header-row">
+                            <h3 style="margin: 0; color: #d1d5db; font-size: 1.1rem;">🔄 Transfers</h3>
+                            <input type="text" class="section-filter-input" placeholder="Netuid" x-model="sectionFilters.transfer.netuid">
+                            <input type="number" class="section-filter-input" placeholder="Min τ" min="0" step="any" x-model="sectionFilters.transfer.minTao">
+                            <input type="number" class="section-filter-input" placeholder="Hi τ" min="0" step="any" x-model.number="highlightThresholds.transfer">
+                            <button @click="hiddenSections.transfer = true" class="section-hide-btn" title="Hide section">✕</button>
+                        </div>
+                        <div class="events-container">
+                            <template x-for="block in filteredTransferBlocks" :key="'transfer-' + block.block_number">
+                                <div class="block-card">
+                                    <!-- Block Header -->
+                                    <div class="block-header">
+                                        <div style="display: flex; align-items: baseline; gap: 0.5rem;">
+                                            <span style="font-size: 0.9rem; font-weight: 600; color: #d1d5db;">
+                                                Block #<span x-text="block.block_number"></span>
+                                            </span>
+                                            <span style="font-size: 0.75rem; color: #6b7280;" x-text="'(' + formatTimestamp(block.block_timestamp) + ')'"></span>
+                                            <span class="event-count" x-text="block.events.length + ' events'"></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Transfer Events in Block -->
+                                    <div class="events-list">
+                                        <template x-if="block.events.length === 0">
+                                            <div style="padding: 4px 12px; color: #6b7280; font-size: 0.875rem; font-style: italic;">
+                                                No transactions matched the current filters
+                                            </div>
+                                        </template>
+                                        <template x-if="block.events.length > 0">
+                                            <template x-for="(event, index) in block.events" :key="event.id || `${block.block_number}-${event.extrinsic_index}-${index}`">
+                                                <div class="transfer-event-card" :class="{ 'item-highlight': isTransferHighlighted(event) }">
+                                                    <a :href="`/subnet/${event.netuid}`" target="_blank" class="transfer-netuid" :class="event.netuid === -1 ? 'tao' : 'subnet'" x-text="event.netuid === -1 ? 'TAO' : 'SN ' + event.netuid"></a>
+                                                    <div class="transfer-amount" :class="event.netuid === -1 ? 'tao' : 'subnet'" x-text="formatTransferAmount(event.tao_amount) + 'τ'"></div>
+                                                    <div class="transfer-from clickable-address" @click="openAddressModal(event.from_address)" x-html="formatAddress(event.from_address)" :title="event.from_address"></div>
+                                                    <div class="transfer-arrow">>></div>
+                                                    <div class="transfer-to clickable-address" @click="openAddressModal(event.to_address)" x-html="formatAddress(event.to_address)" :title="event.to_address"></div>
+                                                </div>
+                                            </template>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Trade Events Column -->
+                    <div class="events-column" x-show="!hiddenSections.trade">
+                        <div class="section-header-row">
+                            <h3 style="margin: 0; color: #d1d5db; font-size: 1.1rem;">💰 Trades</h3>
+                            <input type="text" class="section-filter-input" placeholder="Netuid" x-model="sectionFilters.trade.netuid">
+                            <input type="number" class="section-filter-input" placeholder="Min τ" min="0" step="any" x-model="sectionFilters.trade.minTao">
+                            <input type="number" class="section-filter-input" placeholder="Hi τ" min="0" step="any" x-model.number="highlightThresholds.trade">
+                            <button @click="hiddenSections.trade = true" class="section-hide-btn" title="Hide section">✕</button>
+                        </div>
+                        <div class="events-container">
+                            <template x-for="block in filteredTradeBlocks" :key="'trade-' + block.block_number">
+                                <div class="block-card">
+                                    <!-- Block Header -->
+                                    <div class="block-header">
+                                        <div style="display: flex; align-items: baseline; gap: 0.5rem;">
+                                            <span style="font-size: 0.9rem; font-weight: 600; color: #d1d5db;">
+                                                Block #<span x-text="block.block_number"></span>
+                                            </span>
+                                            <span style="font-size: 0.75rem; color: #6b7280;" x-text="'(' + formatTimestamp(block.block_timestamp) + ')'"></span>
+                                            <span class="event-count" x-text="block.events.length + ' events'"></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Events in Block -->
+                                    <div class="events-list">
+                                        <template x-if="block.events.length === 0">
+                                            <div style="padding: 4px 12px; color: #6b7280; font-size: 0.875rem; font-style: italic;">
+                                                No transactions matched the current filters
+                                            </div>
+                                        </template>
+                                        <template x-if="block.events.length > 0">
+                                            <template x-for="(event, index) in block.events" :key="event.id || `${block.block_number}-${event.extrinsic_index}-${index}`">
+                                                <div class="event-card" :class="[event.is_sell ? 'sell' : 'buy', isTradeHighlighted(event) ? 'item-highlight' : '']">
+                                                    <a :href="`/subnet/${event.netuid}`" target="_blank" class="event-netuid" x-text="'SN ' + event.netuid"></a>
+                                                    <div class="event-amount" :class="event.is_sell ? 'sell' : 'buy'" x-text="(event.is_sell ? '-' : '+') + formatAmount(event.tao) + 'τ'"></div>
+                                                    <div class="event-price" x-text="formatPrice(event.price) + 'τ/α'"></div>
+                                                    <div class="event-address clickable-address" @click="openAddressModal(event.address)" x-html="formatAddress(event.address)" :title="event.address"></div>
+                                                </div>
+                                            </template>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Pending Extrinsics Column (mempool) -->
+                    <div class="events-column" x-show="!hiddenSections.pending">
+                        <div class="section-header-row pending-mempool-header">
+                            <h3 style="margin: 0; color: #d1d5db; font-size: 1.1rem;">⏳ Mempool</h3>
+                            <span class="status-dot" :class="wsConnected ? 'connected' : 'disconnected'"></span>
+                            <input type="text" class="section-filter-input" placeholder="Netuid" x-model="sectionFilters.pending.netuid">
+                            <input type="number" class="section-filter-input" placeholder="Min τ" min="0" step="any" x-model="sectionFilters.pending.minTao">
+                            <input type="number" class="section-filter-input" placeholder="Hi τ" min="0" step="any" x-model.number="highlightThresholds.pending">
+                            <button @click="hiddenSections.pending = true" class="section-hide-btn" title="Hide section">✕</button>
+                        </div>
+                        <div x-show="!wsConnected && pendingExtrinsics.length === 0" style="text-align: center; padding: 2rem; color: var(--text-secondary); font-size: 0.875rem;">
+                            Connecting…
+                        </div>
+                        <div x-show="wsConnected && pendingExtrinsics.length === 0" style="text-align: center; padding: 2rem; color: var(--text-secondary); font-size: 0.875rem;">
+                            No pending tracked extrinsics
+                        </div>
+                        <div x-show="pendingExtrinsics.length > 0" class="events-container">
+                            <template x-for="(item, index) in pendingExtrinsicsDisplayList" :key="item._rowId || item.id + '-' + index">
+                                <div class="block-card pending-extrinsic-card" :class="{ 'pending-extrinsic-still-pending': item.still_pending !== false, 'item-highlight': isPendingHighlighted(item) }">
+                                    <div class="events-list">
+                                        <!-- Add Stake: same style as key events trade (buy) -->
+                                        <template x-if="item.display_type === 'add_stake'">
+                                            <div class="event-card buy" :class="{ 'pending-add-stake-call': isVulnerablePendingCall(item) }">
+                                                <a :href="`/subnet/${getPendingNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getPendingNetuid(item)"></a>
+                                                <div class="event-amount buy" x-text="'+' + (getPendingAmount(item) != null ? formatPendingAmount(getPendingAmount(item)) : '—') + 'τ'"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <span x-show="isVulnerablePendingCall(item)" class="pending-skeleton-icon" title="Vulnerable call">💀</span>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Remove Stake: same style as key events trade (sell) -->
+                                        <template x-if="item.display_type === 'remove_stake'">
+                                            <div class="event-card sell">
+                                                <a :href="`/subnet/${getPendingNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getPendingNetuid(item)"></a>
+                                                <div class="event-amount sell" x-text="'-' + getPendingRemoveAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Transfer: same style as key events transfer -->
+                                        <template x-if="item.display_type === 'transfer'">
+                                            <div class="transfer-event-card">
+                                                <a href="/subnet/-1" target="_blank" class="transfer-netuid tao" x-text="'TAO'"></a>
+                                                <div class="transfer-amount tao" x-text="(getPendingAmount(item) != null ? formatPendingAmount(getPendingAmount(item)) : '—') + 'τ'"></div>
+                                                <div class="transfer-from clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div class="transfer-arrow">>></div>
+                                                <div class="transfer-to clickable-address" @click="item.args && item.args.dest && openAddressModal(item.args.dest)" x-html="formatPendingAddress(item.args && item.args.dest)" :title="item.args && item.args.dest || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Transfer stake: SN origin, from address >> to dest_coldkey, alpha_amount, time -->
+                                        <template x-if="item.display_type === 'transfer_stake'">
+                                            <div class="transfer-event-card">
+                                                <a :href="`/subnet/${getPendingTransferStakeOriginNetuid(item)}`" target="_blank" class="transfer-netuid subnet" x-text="'SN ' + getPendingTransferStakeOriginNetuid(item)"></a>
+                                                <div class="transfer-from clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div class="transfer-arrow">>></div>
+                                                <div class="transfer-to clickable-address" @click="item.args && item.args.destination_coldkey && openAddressModal(item.args.destination_coldkey)" x-html="formatPendingAddress(item.args && item.args.destination_coldkey)" :title="item.args && item.args.destination_coldkey || ''"></div>
+                                                <div class="transfer-amount subnet" x-text="getPendingTransferStakeAmountDisplay(item)"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Move stake / Swap stake: buy (origin=0), sell (dest=0), or both netuids -->
+                                        <template x-if="(item.display_type === 'move_stake' || item.display_type === 'swap_stake') && getPendingOriginNetuid(item) === 0">
+                                            <div class="event-card buy" :class="{ 'pending-add-stake-call': isVulnerablePendingCall(item) }">
+                                                <a :href="`/subnet/${getPendingDestNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getPendingDestNetuid(item)"></a>
+                                                <div class="event-amount buy" x-text="'+' + getPendingMoveOrSwapAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <span x-show="isVulnerablePendingCall(item)" class="pending-skeleton-icon" title="Vulnerable call">💀</span>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <template x-if="(item.display_type === 'move_stake' || item.display_type === 'swap_stake') && getPendingDestNetuid(item) === 0">
+                                            <div class="event-card sell" :class="{ 'pending-add-stake-call': isVulnerablePendingCall(item) }">
+                                                <a :href="`/subnet/${getPendingOriginNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getPendingOriginNetuid(item)"></a>
+                                                <div class="event-amount sell" x-text="'-' + getPendingMoveOrSwapAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <span x-show="isVulnerablePendingCall(item)" class="pending-skeleton-icon" title="Vulnerable call">💀</span>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <template x-if="(item.display_type === 'move_stake' || item.display_type === 'swap_stake') && getPendingOriginNetuid(item) !== 0 && getPendingDestNetuid(item) !== 0">
+                                            <div class="transfer-event-card" :class="{ 'pending-add-stake-call': isVulnerablePendingCall(item) }">
+                                                <a :href="`/subnet/${getPendingOriginNetuid(item)}`" target="_blank" class="event-netuid netuid-sell" x-text="'SN ' + getPendingOriginNetuid(item)"></a>
+                                                <div class="transfer-arrow">>></div>
+                                                <a :href="`/subnet/${getPendingDestNetuid(item)}`" target="_blank" class="event-netuid netuid-buy" x-text="'SN ' + getPendingDestNetuid(item)"></a>
+                                                <div class="transfer-amount subnet" x-text="getPendingMoveOrSwapAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <span x-show="isVulnerablePendingCall(item)" class="pending-skeleton-icon" title="Vulnerable call">💀</span>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- EVM transaction: label, address, time, details -->
+                                        <template x-if="item.display_type === 'evm'">
+                                            <div class="event-card">
+                                                <span class="event-netuid subnet" style="background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: #a78bfa;">EVM</span>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Transaction details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- MevShield announce_next_key: label, address, time, details -->
+                                        <template x-if="item.display_type === 'mevshield'">
+                                            <div class="event-card">
+                                                <span class="event-netuid subnet" style="background: rgba(180, 130, 70, 0.25); border: 1px solid rgba(180, 130, 70, 0.5); color: #c4a574;">MevShield</span>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- System (e.g. set_heap_pages): badge, signer, time, details -->
+                                        <template x-if="item.display_type === 'system'">
+                                            <div class="event-card">
+                                                <span class="event-netuid subnet" style="background: rgba(100, 116, 139, 0.25); border: 1px solid rgba(100, 116, 139, 0.45); color: #94a3b8;">System</span>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Start call: SN <netuid>, START CALL badge, signer, time, details -->
+                                        <template x-if="item.display_type === 'start_call'">
+                                            <div class="event-card">
+                                                <a :href="`/subnet/${getPendingNetuid(item)}`" target="_blank" class="event-netuid" style="background: rgba(45, 212, 191, 0.2); border: 1px solid rgba(45, 212, 191, 0.4); color: #2dd4bf;" x-text="'SN ' + getPendingNetuid(item)"></a>
+                                                <span class="event-netuid subnet" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #93c5fd;">START CALL</span>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatTimestampShort(item.received_at, refreshKey)"></div>
+                                                <button type="button" class="pending-detail-icon" @click.stop="togglePendingDetail(item._rowId || item.id + '-' + index)" title="Call details">ℹ</button>
+                                            </div>
+                                        </template>
+                                        <!-- Proxy strip: shown for all proxy calls, regardless of display_type -->
+                                        <template x-if="item.proxy_address">
+                                            <div class="pending-proxy-row">
+                                                <span class="pending-proxy-badge">PROXY</span>
+                                                <span class="pending-proxy-validity"
+                                                    :class="item.proxy_valid === true ? 'pending-proxy-validity-valid' : item.proxy_valid === false ? 'pending-proxy-validity-invalid' : 'pending-proxy-validity-unknown'"
+                                                    :title="item.proxy_valid === true ? 'Proxy relationship verified' : item.proxy_valid === false ? 'Proxy relationship not found on-chain' : 'Proxy validity not yet checked'">
+                                                    <span x-text="item.proxy_valid === true ? '✓' : item.proxy_valid === false ? '✗' : '?'"></span>
+                                                </span>
+                                                <span class="pending-proxy-address clickable-address" @click.stop="openAddressModal(item.proxy_address)" x-html="formatAddress(item.proxy_address)" :title="item.proxy_address"></span>
+                                            </div>
+                                        </template>
+                                        <div class="pending-call-details" x-show="expandedPendingDetailKey === (item._rowId || item.id + '-' + index)">
+                                            <div class="pending-call-details-inner">
+                                                <div><span class="pending-detail-label">call_module</span><span x-text="item.call_module"></span></div>
+                                                <div><span class="pending-detail-label">call_function</span><span x-text="item.call_function"></span></div>
+                                                <template x-if="item.proxy_address">
+                                                    <div>
+                                                        <span class="pending-detail-label">proxy_address</span>
+                                                        <span class="clickable-address" @click.stop="openAddressModal(item.proxy_address)" :title="item.proxy_address" x-text="item.proxy_address"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="item.proxy_address">
+                                                    <div>
+                                                        <span class="pending-detail-label">proxy_valid</span>
+                                                        <span :class="item.proxy_valid === true ? 'pending-proxy-validity-valid' : item.proxy_valid === false ? 'pending-proxy-validity-invalid' : 'pending-proxy-validity-unknown'"
+                                                              x-text="item.proxy_valid === true ? 'valid' : item.proxy_valid === false ? 'invalid' : 'unknown'"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="item.display_type === 'evm' && item.evm_transaction">
+                                                    <div class="pending-detail-args"><span class="pending-detail-label">transaction</span><pre x-text="JSON.stringify(item.evm_transaction, null, 2)"></pre></div>
+                                                </template>
+                                                <template x-if="item.display_type !== 'evm' || !item.evm_transaction">
+                                                    <div class="pending-detail-args"><span class="pending-detail-label">args</span><pre x-text="JSON.stringify(item.args || {}, null, 2)"></pre></div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Failed Trades Column -->
+                    <div class="events-column" x-show="!hiddenSections.failedTrades">
+                        <div class="section-header-row">
+                            <h3 style="margin: 0; color: #fca5a5; font-size: 1.1rem;">❌ Fails</h3>
+                            <input type="text" class="section-filter-input" placeholder="Netuid" x-model="sectionFilters.failedTrades.netuid">
+                            <input type="number" class="section-filter-input" placeholder="Min τ" min="0" step="any" x-model="sectionFilters.failedTrades.minTao">
+                            <input type="number" class="section-filter-input" placeholder="Hi τ" min="0" step="any" x-model.number="highlightThresholds.failedTrades">
+                            <button @click="hiddenSections.failedTrades = true" class="section-hide-btn" title="Hide section">✕</button>
+                        </div>
+
+                        <!-- Loading State (initial) -->
+                        <div x-show="failedTradesLoading && failedTrades.length === 0" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div class="spinner"></div>
+                            <p style="margin-top: 1rem; font-size: 0.875rem;">Loading...</p>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div x-show="!failedTradesLoading && failedTrades.length === 0" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+                            <p style="font-size: 0.875rem;">No failed trades</p>
+                        </div>
+                        <div x-show="!failedTradesLoading && failedTrades.length > 0 && filteredFailedTrades.length === 0" style="text-align: center; padding: 2rem; color: #6b7280; font-size: 0.875rem;">
+                            No trades match filters
+                        </div>
+
+                        <!-- Failed Trades List -->
+                        <div x-show="filteredFailedTrades.length > 0" class="events-container">
+                            <template x-for="(item, index) in filteredFailedTrades" :key="'failed-' + getFailedTradeKey(item)">
+                                <div class="block-card pending-extrinsic-card" :class="{ 'item-highlight': isFailedTradeHighlighted(item), 'failed-trade-fresh': lastBlockNumber != null && item.block_number != null && (lastBlockNumber - item.block_number) <= 0 }">
+                                    <div class="events-list">
+
+                                        <!-- add_stake / add_stake_limit -->
+                                        <template x-if="getFailedTradeDisplayType(item) === 'add_stake'">
+                                            <div class="event-card buy">
+                                                <a :href="`/subnet/${getFailedTradeNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getFailedTradeNetuid(item)"></a>
+                                                <div class="event-amount buy" x-text="'+' + (getFailedTradeAmount(item) != null ? formatPendingAmount(getFailedTradeAmount(item)) : '—') + 'τ'"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatFailedTradeTimestamp(item, refreshKey)"></div>
+                                                <button type="button" :class="getFailedTradeErrorMark(item) ? getFailedTradeErrorMarkClass(item) : 'pending-detail-icon'" @click.stop="expandedFailedTradeKey = expandedFailedTradeKey === getFailedTradeKey(item) ? null : getFailedTradeKey(item)" :title="item.error_message || 'Details'" x-text="getFailedTradeErrorMark(item) || 'ℹ'"></button>
+                                            </div>
+                                        </template>
+
+                                        <!-- remove_stake / remove_stake_limit / remove_stake_full_limit -->
+                                        <template x-if="getFailedTradeDisplayType(item) === 'remove_stake'">
+                                            <div class="event-card sell">
+                                                <a :href="`/subnet/${getFailedTradeNetuid(item)}`" target="_blank" class="event-netuid" x-text="'SN ' + getFailedTradeNetuid(item)"></a>
+                                                <div class="event-amount sell" x-text="'-' + getFailedTradeRemoveAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatFailedTradeTimestamp(item, refreshKey)"></div>
+                                                <button type="button" :class="getFailedTradeErrorMark(item) ? getFailedTradeErrorMarkClass(item) : 'pending-detail-icon'" @click.stop="expandedFailedTradeKey = expandedFailedTradeKey === getFailedTradeKey(item) ? null : getFailedTradeKey(item)" :title="item.error_message || 'Details'" x-text="getFailedTradeErrorMark(item) || 'ℹ'"></button>
+                                            </div>
+                                        </template>
+
+                                        <!-- move_stake / swap_stake -->
+                                        <template x-if="getFailedTradeDisplayType(item) === 'move_stake' || getFailedTradeDisplayType(item) === 'swap_stake'">
+                                            <div class="transfer-event-card">
+                                                <a :href="`/subnet/${getFailedTradeNetuid(item)}`" target="_blank" class="event-netuid netuid-sell" x-text="'SN ' + getFailedTradeNetuid(item)"></a>
+                                                <div class="transfer-arrow">>></div>
+                                                <a :href="`/subnet/${getFailedTradeDestNetuid(item)}`" target="_blank" class="event-netuid netuid-buy" x-text="'SN ' + getFailedTradeDestNetuid(item)"></a>
+                                                <div class="transfer-amount subnet" x-text="getFailedTradeMoveAmountDisplay(item)"></div>
+                                                <div class="event-address clickable-address" @click="item.address && openAddressModal(item.address)" x-html="formatPendingAddress(item.address)" :title="item.address || ''"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; flex-shrink: 0;" x-text="formatFailedTradeTimestamp(item, refreshKey)"></div>
+                                                <button type="button" :class="getFailedTradeErrorMark(item) ? getFailedTradeErrorMarkClass(item) : 'pending-detail-icon'" @click.stop="expandedFailedTradeKey = expandedFailedTradeKey === getFailedTradeKey(item) ? null : getFailedTradeKey(item)" :title="item.error_message || 'Details'" x-text="getFailedTradeErrorMark(item) || 'ℹ'"></button>
+                                            </div>
+                                        </template>
+
+                                        <!-- Proxy row -->
+                                        <template x-if="item.proxy_address">
+                                            <div class="pending-proxy-row">
+                                                <span class="pending-proxy-badge">PROXY</span>
+                                                <span class="pending-proxy-validity"
+                                                    :class="(item.error_message || '').startsWith('Proxy.NotProxy') ? 'pending-proxy-validity-invalid' : 'pending-proxy-validity-valid'"
+                                                    :title="(item.error_message || '').startsWith('Proxy.NotProxy') ? 'Proxy relationship not found on-chain' : 'Proxy relationship verified'">
+                                                    <span x-text="(item.error_message || '').startsWith('Proxy.NotProxy') ? '✗' : '✓'"></span>
+                                                </span>
+                                                <span class="pending-proxy-address clickable-address" @click.stop="openAddressModal(item.proxy_address)" x-html="formatAddress(item.proxy_address)" :title="item.proxy_address"></span>
+                                            </div>
+                                        </template>
+
+                                        <!-- Expandable details -->
+                                        <div class="pending-call-details" x-show="expandedFailedTradeKey === getFailedTradeKey(item)">
+                                            <div class="pending-call-details-inner">
+                                                <!-- Error message — prominent red block -->
+                                                <div class="failed-trade-error-block">
+                                                    <span class="pending-detail-label" style="color: #f87171;">error</span>
+                                                    <span class="failed-trade-error-text" x-text="item.error_message"></span>
+                                                </div>
+                                                <div><span class="pending-detail-label">call</span><span x-text="(item.call_module || '') + '.' + (item.call_function || '')"></span></div>
+                                                <template x-if="item.proxy_address">
+                                                    <div><span class="pending-detail-label">proxy</span><span class="clickable-address" @click.stop="openAddressModal(item.proxy_address)" :title="item.proxy_address" x-text="item.proxy_address"></span></div>
+                                                </template>
+                                                <div class="pending-detail-args"><span class="pending-detail-label">args</span><pre x-text="JSON.stringify(item.call_args || {}, null, 2)"></pre></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Load More Button -->
+                            <div style="text-align: center" x-show="failedTrades.length > 0">
+                                <button @click="loadMoreFailedTrades()" class="btn-secondary" :disabled="failedTradesLoading" style="width: 100%;">
+                                    <span x-show="!failedTradesLoading">📅 Load another 30 mins</span>
+                                    <span x-show="failedTradesLoading">
+                                        <div class="spinner" style="width: 16px; height: 16px; display: inline-block;"></div>
+                                        Loading...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notifiable Events Column -->
+                    <div class="events-column" x-show="!hiddenSections.keyEvents">
+                        <div class="section-header-row">
+                            <h3 style="margin: 0; color: #d1d5db; font-size: 1.1rem;">🔔 Key Events</h3>
+                            <input type="text" class="section-filter-input" placeholder="Netuid" x-model="sectionFilters.keyEvents.netuid">
+                            <input type="number" class="section-filter-input" placeholder="Min τ" min="0" step="any" x-model="sectionFilters.keyEvents.minTao">
+                            <input type="number" class="section-filter-input" placeholder="Hi τ" min="0" step="any" x-model.number="highlightThresholds.keyEvents">
+                            <button @click="hiddenSections.keyEvents = true" class="section-hide-btn" title="Hide section">✕</button>
+                        </div>
+                        
+                        <!-- Loading State -->
+                        <div x-show="notifiableEventsLoading && notifiableEvents.length === 0" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div class="spinner"></div>
+                            <p style="margin-top: 1rem; font-size: 0.875rem;">Loading...</p>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div x-show="!notifiableEventsLoading && notifiableEvents.length === 0" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">🔕</div>
+                            <p style="font-size: 0.875rem;">No notifiable events</p>
+                        </div>
+                        <div x-show="!notifiableEventsLoading && notifiableEvents.length > 0 && filteredNotifiableEvents.length === 0" style="text-align: center; padding: 2rem; color: #6b7280; font-size: 0.875rem;">
+                            No events match filters
+                        </div>
+
+                        <!-- Notifiable Events Container -->
+                        <div x-show="filteredNotifiableEvents.length > 0" class="events-container">
+                            <template x-for="(item, index) in filteredNotifiableEvents" :key="index">
+                                <div class="block-card" :class="{ 'item-highlight': isKeyEventHighlighted(item) }">
+                                    <!-- Event Details -->
+                                    <div class="events-list">
+                                        <!-- Trade Event -->
+                                        <template x-if="item.type === 'trade'">
+                                            <div class="event-card" :class="item.event.is_sell ? 'sell' : 'buy'">
+                                                <a :href="`/subnet/${item.event.netuid}`" target="_blank" class="event-netuid" x-text="'SN ' + item.event.netuid"></a>
+                                                <div class="event-amount" :class="item.event.is_sell ? 'sell' : 'buy'" x-text="(item.event.is_sell ? '-' : '+') + formatAmount(item.event.tao) + 'τ'"></div>
+                                                <div class="event-price" x-text="formatPrice(item.event.price) + 'τ/α'"></div>
+                                                <div class="event-address clickable-address" @click="openAddressModal(item.event.address)" x-html="formatAddress(item.event.address)" :title="item.event.address"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; margin-top: 0.25rem;">
+                                                    <span x-text="formatTimestampShort(item.block_timestamp, refreshKey)"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        
+                                        <!-- Transfer Event -->
+                                        <template x-if="item.type === 'transfer'">
+                                            <div class="transfer-event-card">
+                                                <a :href="`/subnet/${item.event.netuid}`" target="_blank" class="transfer-netuid" :class="item.event.netuid === -1 ? 'tao' : 'subnet'" x-text="item.event.netuid === -1 ? 'TAO' : 'SN ' + item.event.netuid"></a>
+                                                <div class="transfer-amount" :class="item.event.netuid === -1 ? 'tao' : 'subnet'" x-text="formatTransferAmount(item.event.tao_amount) + 'τ'"></div>
+                                                <div class="transfer-from clickable-address" @click="openAddressModal(item.event.from_address)" x-html="formatAddress(item.event.from_address)" :title="item.event.from_address"></div>
+                                                <div class="transfer-arrow">>></div>
+                                                <div class="transfer-to clickable-address" @click="openAddressModal(item.event.to_address)" x-html="formatAddress(item.event.to_address)" :title="item.event.to_address"></div>
+                                                <div style="font-size: 0.7rem; color: #6b7280; margin-top: 0.25rem; grid-column: 1 / -1;">
+                                                    <span x-text="formatTimestampShort(item.block_timestamp, refreshKey)"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <!-- Load More Button -->
+                            <div style="text-align: center" x-show="notifiableEvents.length > 0">
+                                <button @click="loadAnotherThirtyMinutes()" class="btn-secondary" :disabled="notifiableEventsLoading" style="width: 100%;">
+                                    <span x-show="!notifiableEventsLoading">📅 Load events in another 30 mins</span>
+                                    <span x-show="notifiableEventsLoading">
+                                        <div class="spinner" style="width: 16px; height: 16px; display: inline-block;"></div>
+                                        Loading...
+                                    </span>
+                                </button>
+                            </div>
+
+                            <!-- Showing From Timestamp (at bottom) -->
+                            <!-- <div style="font-size: 0.75rem; color: #6b7280; margin-top: 1rem; text-align: center;" x-show="showingEventsFrom">
+                                Showing from: <span x-text="formatDateRange(showingEventsFrom)"></span>
+                            </div> -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Address Modal -->
+        <div x-show="addressModalOpen" 
+             x-transition
+             class="address-modal-overlay"
+             @click.self="closeAddressModal()">
+            <div class="address-modal" @click.away="closeAddressModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">Address Details</h3>
+                    <button @click="closeAddressModal()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Full Address -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Address</div>
+                        <div class="address-modal-address">
+                            <span x-text="selectedAddress"></span>
+                            <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                        </div>
+                    </div>
+
+                    <!-- Label Management -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Label</div>
+                        <div x-show="!editingLabel">
+                            <div class="address-modal-label-display">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                        <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                    </template>
+                                    <template x-if="modalLabelCache">
+                                        <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                    </template>
+                                    <template x-if="!modalLabelCache">
+                                        <span class="address-modal-no-label">No label set</span>
+                                    </template>
+                                    <template x-if="modalTypeCache">
+                                        <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                    </template>
+                                </div>
+                                <div style="margin-left: auto;" class="address-modal-label-actions">
+                                    <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                        <span x-show="!modalLabelCache">➕ Add</span>
+                                        <span x-show="modalLabelCache">✏️ Edit</span>
+                                    </button>
+                                    <template x-if="modalLabelCache">
+                                        <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div x-show="editingLabel">
+                            <div class="address-modal-label-form">
+                                <input 
+                                    type="text" 
+                                    x-model="labelInput"
+                                    @keydown.enter="saveLabelFromModal()"
+                                    @keydown.escape="cancelEditingLabel()"
+                                    class="address-modal-label-input"
+                                    placeholder="Enter label..."
+                                    x-ref="labelInput"
+                                >
+                                <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                    <option value="">No type</option>
+                                    <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                        <option :value="typeName" x-text="typeName"></option>
+                                    </template>
+                                </select>
+                                <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                                <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="address-modal-actions">
+                        <a :href="`/account/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-primary"
+                           target="_blank">
+                           💼 Account Page
+                        </a>
+                        <a :href="`/strategy/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🧠 Strategy
+                        </a>
+                        <a :href="`/connections/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🔗 Connections
+                        </a>
+                        <a :href="`https://taostats.io/account/${selectedAddress}`" 
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            🌐 Taostats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Settings Modal -->
+        <div x-show="notificationSettingsModalOpen" 
+             x-transition
+             class="address-modal-overlay"
+             @click.self="closeNotificationSettings()">
+            <div class="address-modal" @click.away="closeNotificationSettings()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">⚙️ Notification Settings</h3>
+                    <button @click="closeNotificationSettings()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Description -->
+                    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f3f4f6; border-radius: 8px; font-size: 0.875rem; color: #4b5563;">
+                        <p style="margin-bottom: 0.5rem;"><strong>Notification Criteria:</strong></p>
+                        <p>You'll receive notifications for events that match <strong>either</strong> condition:</p>
+                        <ul style="margin: 0.5rem 0 0 1.5rem; list-style-type: disc;">
+                            <li>Event involves a labelled address (excluding ignored patterns)</li>
+                            <li>Event amount exceeds the threshold</li>
+                        </ul>
+                    </div>
+
+                    <!-- Amount Threshold -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Minimum Amount Threshold</div>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <input 
+                                type="number" 
+                                x-model.number="notificationSettings.minAmountThreshold"
+                                @change="updateAmountThreshold()"
+                                min="0"
+                                step="1"
+                                class="address-modal-label-input"
+                                style="flex: 1;"
+                            >
+                            <span style="font-weight: 600; color: #6b7280;">τ</span>
+                        </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #6b7280;">
+                            Notify for events with amount ≥ <strong x-text="notificationSettings.minAmountThreshold"></strong> TAO
+                        </div>
+                    </div>
+
+                    <!-- Ignored Label Patterns -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Ignored Label Patterns</div>
+                        <div style="margin-bottom: 1rem; font-size: 0.8rem; color: #6b7280;">
+                            Labels containing these words will not trigger notifications
+                        </div>
+                        
+                        <!-- Add New Pattern -->
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <input 
+                                type="text" 
+                                x-model="newIgnoredPattern"
+                                @keydown.enter="addIgnoredPattern()"
+                                placeholder="Enter pattern (e.g., bot, test)"
+                                class="address-modal-label-input"
+                                style="flex: 1;"
+                            >
+                            <button @click="addIgnoredPattern()" class="btn-small btn-primary">
+                                ➕ Add
+                            </button>
+                        </div>
+
+                        <!-- Pattern List -->
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <template x-if="notificationSettings.ignoredLabelPatterns.length === 0">
+                                <div style="padding: 1rem; background: #f9fafb; border-radius: 6px; text-align: center; color: #9ca3af; font-size: 0.875rem;">
+                                    No ignored patterns. All labelled addresses will trigger notifications.
+                                </div>
+                            </template>
+                            <template x-for="pattern in notificationSettings.ignoredLabelPatterns" :key="pattern">
+                                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                    <span style="font-family: monospace; font-weight: 500; color: #374151;" x-text="pattern"></span>
+                                    <button @click="removeIgnoredPattern(pattern)" class="btn-small btn-danger">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+                        <button @click="closeNotificationSettings()" class="address-modal-btn address-modal-btn-primary">
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

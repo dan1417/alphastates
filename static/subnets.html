@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Subnets | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+</head>
+<body>
+    <div class="container" x-data="subnetsApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>All Subnets</h1>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a href="/addresses" class="back-link">🏷️ Manage Addresses</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="subnets-page">
+            <div class="card">
+                <div class="card-header" x-ref="cardHeader">
+                    <h2>
+                        Subnets
+                        <span style="font-weight: 400; color: var(--text-secondary); font-size: 0.9rem; margin-left: 0.5rem;">
+                            (<template x-if="filterNetuid.trim() || filterName.trim()"><span><span x-text="sortedSubnets.length"></span> / </span></template><span x-text="subnets.length"></span>)
+                        </span>
+                    </h2>
+                    <div class="update-info" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <input type="text"
+                               x-model="filterNetuid"
+                               placeholder="Netuid (exact)"
+                               style="padding: 0.35rem 0.6rem; font-size: 0.85rem; background: rgba(31, 41, 55, 0.8); border: 1px solid rgba(55, 65, 81, 0.6); border-radius: 4px; color: #d1d5db; width: 8rem;">
+                        <input type="text"
+                               x-model="filterName"
+                               placeholder="Subnet Name (regex)"
+                               :title="filterNameError || 'Case-insensitive regex match against subnet name'"
+                               :style="`padding: 0.35rem 0.6rem; font-size: 0.85rem; background: rgba(31, 41, 55, 0.8); border: 1px solid ${filterNameError ? 'var(--danger-color, #ef4444)' : 'rgba(55, 65, 81, 0.6)'}; border-radius: 4px; color: #d1d5db; width: 12rem;`">
+                        <span x-show="lockCost != null" title="Network registration lock cost" style="color: var(--text-secondary);">
+                            Lock Cost: <strong style="color: var(--warning-color);" x-text="Number(lockCost).toFixed(2) + ' τ'"></strong>
+                        </span>
+                        <label style="display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); cursor: pointer; user-select: none;" title="Show registration time in UTC; uncheck to show in your local timezone">
+                            <input type="checkbox" x-model="showUtc">
+                            <span>UTC</span>
+                        </label>
+                        <span x-show="blockNumber">Snapshot at block <strong x-text="blockNumber"></strong></span>
+                        <span class="live-indicator" :class="liveConnected ? 'live-on' : 'live-off'" :title="liveConnected ? 'Live (WebSocket connected)' : 'Disconnected — reconnecting…'">
+                            <span class="live-dot"></span>
+                            <span class="live-label" x-text="liveConnected ? 'Live' : 'Offline'"></span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="traders-table-container" style="max-height: none; overflow: visible;">
+                    <template x-if="!subnets.length">
+                        <div class="no-traders">Waiting for snapshot…</div>
+                    </template>
+                    <template x-if="subnets.length">
+                        <table class="traders-table">
+                            <thead>
+                                <tr>
+                                    <th @click="sortBy('netuid')" style="cursor: pointer;">Netuid<span x-text="indicator('netuid')"></span></th>
+                                    <th @click="sortBy('name')" style="cursor: pointer;">Name<span x-text="indicator('name')"></span></th>
+                                    <th @click="sortBy('price')" style="cursor: pointer;">Price<span x-text="indicator('price')"></span></th>
+                                    <th @click="sortBy('liq_price')" style="cursor: pointer;">Liq Price<span x-text="indicator('liq_price')"></span></th>
+                                    <th @click="sortBy('adr')" style="cursor: pointer;" title="ADR = Price / Liq Price">ADR<span x-text="indicator('adr')"></span></th>
+                                    <th @click="sortBy('ema_price')" style="cursor: pointer;">EMA Price<span x-text="indicator('ema_price')"></span></th>
+                                    <th @click="sortBy('tao_in')" style="cursor: pointer;">TAO In<span x-text="indicator('tao_in')"></span></th>
+                                    <th @click="sortBy('alpha_in')" style="cursor: pointer;">Alpha In<span x-text="indicator('alpha_in')"></span></th>
+                                    <th @click="sortBy('alpha_out')" style="cursor: pointer;">Alpha Out<span x-text="indicator('alpha_out')"></span></th>
+                                    <th @click="sortBy('total_emission')" style="cursor: pointer;" title="Share of total network EMA TAO flow">Total Emission<span x-text="indicator('total_emission')"></span></th>
+                                    <th @click="sortBy('chain_buy')" style="cursor: pointer;" title="(0.5 × total_emission − tao_in_emission) × 7200 (TAO/day)">Chain Buy<span x-text="indicator('chain_buy')"></span></th>
+                                    <th @click="sortBy('registered_at')" style="cursor: pointer;">Registered At<span x-text="indicator('registered_at')"></span></th>
+                                    <th @click="sortBy('is_immune')" style="cursor: pointer;">Immune<span x-text="indicator('is_immune')"></span></th>
+                                    <th @click="sortBy('is_at_risk')" style="cursor: pointer;" title="3 non-immune subnets with the lowest EMA price">At Risk<span x-text="indicator('is_at_risk')"></span></th>
+                                    <th @click="sortBy('owner_coldkey')" style="cursor: pointer;">Owner Coldkey<span x-text="indicator('owner_coldkey')"></span></th>
+                                    <th @click="sortBy('owner_hotkey')" style="cursor: pointer;">Owner Hotkey<span x-text="indicator('owner_hotkey')"></span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="s in sortedSubnets" :key="s.netuid">
+                                    <tr>
+                                        <td>
+                                            <a :href="`/subnet/${s.netuid}`" target="_blank" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;" x-text="'SN ' + s.netuid"></a>
+                                        </td>
+                                        <td class="subnet-name">
+                                            <a :href="`/subnet/${s.netuid}`" target="_blank" style="color: var(--text-primary); text-decoration: none;" x-text="s.name || '—'"></a>
+                                        </td>
+                                        <td class="price-headline" x-text="Number(s.price).toFixed(5) + ' τ'"></td>
+                                        <td class="price-value" x-text="Number(s.liq_price).toFixed(5) + ' τ'"></td>
+                                        <td :class="adrClass(s)" x-text="s.adr != null ? Number(s.adr).toFixed(3) : '—'"></td>
+                                        <td class="price-value" x-text="s.ema_price != null ? Number(s.ema_price).toFixed(5) + ' τ' : '—'"></td>
+                                        <td class="tao-value" x-text="formatAmount(s.tao_in) + ' τ'"></td>
+                                        <td class="alpha-value" x-text="formatAmount(s.alpha_in) + ' α'"></td>
+                                        <td class="alpha-value" x-text="formatAmount(s.alpha_out) + ' α'"></td>
+                                        <td :class="s.total_emission != null && Number(s.total_emission) > 0 ? 'emission-value' : 'meta-value'" x-text="s.total_emission != null ? (Number(s.total_emission) * 100).toFixed(2) + '%' : '—'"></td>
+                                        <td :class="s.chain_buy != null && Number(s.chain_buy) > 0 ? 'chainbuy-value' : 'meta-value'" x-text="s.chain_buy != null ? formatAmount(s.chain_buy) + ' τ/d' : '—'"></td>
+                                        <td class="meta-value" :title="'Block #' + s.registered_at" x-text="formatRegisteredTs(s.registered_at_timestamp)"></td>
+                                        <td>
+                                            <template x-if="s.is_immune">
+                                                <span class="status-badge status-immune">🛡 Immune</span>
+                                            </template>
+                                            <template x-if="!s.is_immune">
+                                                <span style="color: var(--text-tertiary);">—</span>
+                                            </template>
+                                        </td>
+                                        <td>
+                                            <template x-if="s.is_at_risk">
+                                                <span class="status-badge status-at-risk">⚠ At Risk</span>
+                                            </template>
+                                            <template x-if="!s.is_at_risk">
+                                                <span style="color: var(--text-tertiary);">—</span>
+                                            </template>
+                                        </td>
+                                        <td>
+                                            <div class="address-cell">
+                                                <template x-if="s.owner_coldkey">
+                                                    <span class="trader-address clickable-address"
+                                                          @click="openAddressModal(s.owner_coldkey)"
+                                                          x-text="s.owner_coldkey.substring(0, 8) + '...' + s.owner_coldkey.substring(s.owner_coldkey.length - 6)"></span>
+                                                </template>
+                                                <template x-if="!s.owner_coldkey">
+                                                    <span style="color: var(--text-tertiary);">—</span>
+                                                </template>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="address-cell">
+                                                <template x-if="s.owner_hotkey">
+                                                    <span class="trader-address clickable-address"
+                                                          @click="openAddressModal(s.owner_hotkey)"
+                                                          x-text="s.owner_hotkey.substring(0, 8) + '...' + s.owner_hotkey.substring(s.owner_hotkey.length - 6)"></span>
+                                                </template>
+                                                <template x-if="!s.owner_hotkey">
+                                                    <span style="color: var(--text-tertiary);">—</span>
+                                                </template>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </template>
+                </div>
+            </div>
+        </main>
+
+        <!-- Address Modal -->
+        <div x-show="addressModalOpen"
+             x-transition.opacity
+             class="address-modal-overlay"
+             @click.self="closeAddressModal()">
+            <div class="address-modal" @click.away="closeAddressModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">Address Details</h3>
+                    <button @click="closeAddressModal()" class="address-modal-close">✕</button>
+                </div>
+
+                <div class="address-modal-body">
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Address</div>
+                        <div class="address-modal-address">
+                            <span x-text="selectedAddress"></span>
+                            <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Label</div>
+                        <div x-show="!editingLabel">
+                            <div class="address-modal-label-display">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                        <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                    </template>
+                                    <template x-if="modalLabelCache">
+                                        <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                    </template>
+                                    <template x-if="!modalLabelCache">
+                                        <span class="address-modal-no-label">No label set</span>
+                                    </template>
+                                    <template x-if="modalTypeCache">
+                                        <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                    </template>
+                                </div>
+                                <div style="margin-left: auto;" class="address-modal-label-actions">
+                                    <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                        <span x-show="!modalLabelCache">➕ Add</span>
+                                        <span x-show="modalLabelCache">✏️ Edit</span>
+                                    </button>
+                                    <template x-if="modalLabelCache">
+                                        <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div x-show="editingLabel">
+                            <div class="address-modal-label-form">
+                                <input type="text" x-model="labelInput"
+                                       @keydown.enter="saveLabelFromModal()"
+                                       @keydown.escape="cancelEditingLabel()"
+                                       class="address-modal-label-input"
+                                       placeholder="Enter label..."
+                                       x-ref="labelInput">
+                                <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                    <option value="">No type</option>
+                                    <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                        <option :value="typeName" x-text="typeName"></option>
+                                    </template>
+                                </select>
+                                <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                                <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="address-modal-actions">
+                        <a :href="`/account/${selectedAddress}`" class="address-modal-btn address-modal-btn-primary" target="_blank">💼 Account Page</a>
+                        <a :href="`/strategy/${selectedAddress}`" class="address-modal-btn address-modal-btn-secondary" target="_blank">🧠 Strategy</a>
+                        <a :href="`/connections/${selectedAddress}`" class="address-modal-btn address-modal-btn-secondary" target="_blank">🔗 Connections</a>
+                        <a :href="`https://taostats.io/account/${selectedAddress}`" class="address-modal-btn address-modal-btn-secondary" target="_blank" rel="noopener noreferrer">🌐 Taostats</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/subnets.js"></script>
+</body>
+</html>

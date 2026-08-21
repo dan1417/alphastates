@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subnet Analytics | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+</head>
+<body>
+    <div class="container" x-data="subnetApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>Subnet <span x-text="netuid"></span> Analytics</h1>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a href="/addresses" class="back-link">🏷️ Manage Addresses</a>
+                    </div>
+                </div>
+                <div class="header-controls">
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input 
+                            type="number" 
+                            x-model="subnetInput" 
+                            @keydown.enter="goToSubnet()"
+                            placeholder="Subnet #"
+                            min="0"
+                            max="1024"
+                            style="width: 100px; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);"
+                            class="select-field"
+                        >
+                        <button 
+                            @click="goToSubnet()" 
+                            class="btn-primary"
+                            style="padding: 0.5rem 1rem; white-space: nowrap;"
+                        >
+                            Go to Subnet
+                        </button>
+                    </div>
+                    <select x-model="interval" @change="onIntervalChange()" class="select-field">
+                        <option value="1m">1 Minute</option>
+                        <option value="5m">5 Minutes</option>
+                        <option value="15m">15 Minutes</option>
+                        <option value="1H">1 Hour</option>
+                        <option value="4H" selected>4 Hours</option>
+                        <option value="1D">1 Day</option>
+                        <option value="7D">7 Days</option>
+                    </select>
+                    <select x-model="timezone" @change="onTimezoneChange()" class="select-field" style="min-width: 180px;">
+                        <option value="local">🌍 Local Time</option>
+                        <option value="UTC">UTC</option>
+                        <option value="America/New_York">New York (EST/EDT)</option>
+                        <option value="America/Chicago">Chicago (CST/CDT)</option>
+                        <option value="America/Los_Angeles">Los Angeles (PST/PDT)</option>
+                        <option value="Europe/London">London (GMT/BST)</option>
+                        <option value="Europe/Paris">Paris (CET/CEST)</option>
+                        <option value="Europe/Berlin">Berlin (CET/CEST)</option>
+                        <option value="Asia/Tokyo">Tokyo (JST)</option>
+                        <option value="Asia/Shanghai">Shanghai (CST)</option>
+                        <option value="Asia/Singapore">Singapore (SGT)</option>
+                        <option value="Asia/Dubai">Dubai (GST)</option>
+                        <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- OHLC Chart Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Price Chart (OHLC)</h2>
+                    <div class="update-info" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span>Data updates in real-time | Last updated: <span x-text="lastUpdated"></span></span>
+                        <span class="live-indicator" :class="chartLive ? 'live-on' : 'live-off'" :title="chartLive ? 'Live (auto-refreshing)' : 'Paused'">
+                            <span class="live-dot"></span>
+                            <span class="live-label" x-text="chartLive ? 'Live' : 'Paused'"></span>
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Address Trading Activity Filter -->
+                <div class="address-filter-section">
+                    <div class="address-filter-container">
+                        <label for="address-input" class="address-filter-label">
+                            📍 Show Trading Activity for Address:
+                        </label>
+                        <div class="address-filter-input-group">
+                            <input 
+                                type="text" 
+                                id="address-input"
+                                x-model="addressFilter" 
+                                @keydown.enter="loadAddressTrades()"
+                                placeholder="Enter address (e.g., 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX)"
+                                class="address-filter-input"
+                            >
+                            <button 
+                                @click="loadAddressTrades()" 
+                                class="btn-primary"
+                                :disabled="loadingAddressTrades || !addressFilter"
+                                style="white-space: nowrap;"
+                            >
+                                <span x-show="!loadingAddressTrades">🔍 Show Trades</span>
+                                <span x-show="loadingAddressTrades">Loading...</span>
+                            </button>
+                            <button 
+                                x-show="addressTrades && addressTrades.length > 0"
+                                @click="clearAddressTrades()" 
+                                class="btn-clear"
+                                style="white-space: nowrap;"
+                            >
+                                ✕ Clear
+                            </button>
+                        </div>
+                        <div x-show="addressTrades && addressTrades.length > 0" class="address-filter-info">
+                            <span>Showing <strong x-text="addressTrades?.length || 0"></strong> trades for <strong x-text="addressFilter"></strong></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="chart-container" class="chart-container"></div>
+                
+                <!-- Selection Info -->
+                <div x-show="selectionActive || selectionStats" class="selection-info">
+                    <div x-show="selectionActive && !selectionStats" class="selection-hint">
+                        <span>📍 Click on the chart again to complete selection</span>
+                    </div>
+                    <div x-show="selectionStats" class="selection-stats">
+                        <div class="selection-header">
+                            <h3>Selected Period</h3>
+                            <div class="selection-actions">
+                                <button @click="fetchTradeData()" class="btn-trades" :disabled="loadingTrades">
+                                    <span x-show="!loadingTrades">📊 Show Buys/Sells</span>
+                                    <span x-show="loadingTrades">Loading...</span>
+                                </button>
+                                <button @click="clearSelection()" class="btn-clear">✕ Clear</button>
+                            </div>
+                        </div>
+                        <div class="selection-details">
+                            <div class="selection-time">
+                                <strong>From:</strong> <span x-text="selectionStats?.startTime"></span><br>
+                                <strong>To:</strong> <span x-text="selectionStats?.endTime"></span><br>
+                                <strong>Candles:</strong> <span x-text="selectionStats?.candles"></span>
+                            </div>
+                            <div class="selection-prices">
+                                <div class="price-item">
+                                    <span class="label">Open:</span>
+                                    <span class="value" x-text="selectionStats ? selectionStats.open.toFixed(5) + ' TAO' : ''"></span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="label">Close:</span>
+                                    <span class="value" x-text="selectionStats ? selectionStats.close.toFixed(5) + ' TAO' : ''"></span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="label">High:</span>
+                                    <span class="value" x-text="selectionStats ? selectionStats.high.toFixed(5) + ' TAO' : ''"></span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="label">Low:</span>
+                                    <span class="value" x-text="selectionStats ? selectionStats.low.toFixed(5) + ' TAO' : ''"></span>
+                                </div>
+                                <div class="price-item" :class="selectionStats && selectionStats.change >= 0 ? 'positive' : 'negative'">
+                                    <span class="label">Change:</span>
+                                    <span class="value" x-text="selectionStats ? (selectionStats.change >= 0 ? '+' : '') + selectionStats.changePercent.toFixed(2) + '%' : ''"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Trade Data Display -->
+                        <div x-show="tradeData" x-transition class="trade-data">
+                            <h4>Top Traders <span>(Excluding Transfers)</span></h4>
+                            <div class="traders-grid">
+                                <!-- Buyers List -->
+                                <div class="traders-section buyers-section">
+                                    <h5>
+                                        🟢 Top Buyers (<span x-text="tradeData?.buyers?.length || 0"></span>)
+                                        <template x-if="tradeData?.buyersAgg">
+                                            <span class="section-agg">
+                                                Total: <strong x-text="tradeData.buyersAgg.totalAlpha.toFixed(2) + ' α'"></strong> / 
+                                                <strong x-text="tradeData.buyersAgg.totalTao.toFixed(2) + ' τ'"></strong> | 
+                                                Avg: <strong x-text="tradeData.buyersAgg.avgPrice.toFixed(5) + ' τ/α'"></strong>
+                                            </span>
+                                        </template>
+                                    </h5>
+                                    <div class="traders-table-container">
+                                        <template x-if="!tradeData?.buyers?.length">
+                                            <div class="no-traders">No buyers in this period</div>
+                                        </template>
+                                        <template x-if="tradeData?.buyers?.length">
+                                            <table class="traders-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th @click="sortBuyers('address')" style="cursor: pointer;">Address<span x-text="getSortIndicator('buyers', 'address')"></span></th>
+                                                        <th @click="sortBuyers('net_alpha')" style="cursor: pointer;">Net Alpha<span x-text="getSortIndicator('buyers', 'net_alpha')"></span></th>
+                                                        <th @click="sortBuyers('net_tao')" style="cursor: pointer;">Net Tao<span x-text="getSortIndicator('buyers', 'net_tao')"></span></th>
+                                                        <th @click="sortBuyers('avg_buy')" style="cursor: pointer;">Avg Buy<span x-text="getSortIndicator('buyers', 'avg_buy')"></span></th>
+                                                        <th @click="sortBuyers('upl')" style="cursor: pointer;">UPL<span x-text="getSortIndicator('buyers', 'upl')"></span></th>
+                                                        <th @click="sortBuyers('buy_count')" style="cursor: pointer;">Buys<span x-text="getSortIndicator('buyers', 'buy_count')"></span></th>
+                                                        <th @click="sortBuyers('sell_count')" style="cursor: pointer;">Sells<span x-text="getSortIndicator('buyers', 'sell_count')"></span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(buyer, index) in sortedBuyers" :key="buyer.address">
+                                                        <tr>
+                                                            <td x-text="index + 1"></td>
+                                                            <td class="address-cell">
+                                                                <template x-if="getAddressLabel(buyer.address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(buyer.address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(buyer.address)"
+                                                                      x-text="buyer.address.substring(0, 8) + '...' + buyer.address.substring(buyer.address.length - 6)"></span>
+                                                            </td>
+                                                            <td x-text="buyer.net_alpha.toFixed(2) + ' α'"></td>
+                                                            <td x-text="buyer.net_tao.toFixed(2) + ' τ'"></td>
+                                                            <td class="price-value" x-text="buyer.net_alpha > 0 ? (buyer.net_tao / buyer.net_alpha).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td :class="currentPrice && (buyer.net_alpha * currentPrice - buyer.net_tao) >= 0 ? 'positive' : 'negative'" 
+                                                                x-text="currentPrice ? ((buyer.net_alpha * currentPrice - buyer.net_tao) >= 0 ? '+' : '') + (buyer.net_alpha * currentPrice - buyer.net_tao).toFixed(2) + ' τ' : 'N/A'"></td>
+                                                            <td class="buy-count" x-text="buyer.buy_count"></td>
+                                                            <td class="sell-count" x-text="buyer.sell_count"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </template>
+                                    </div>
+                                </div>
+                                
+                                <!-- Sellers List -->
+                                <div class="traders-section sellers-section">
+                                    <h5>
+                                        🔴 Top Sellers (<span x-text="tradeData?.sellers?.length || 0"></span>)
+                                        <template x-if="tradeData?.sellersAgg">
+                                            <span class="section-agg">
+                                                Total: <strong x-text="tradeData.sellersAgg.totalAlpha.toFixed(2) + ' α'"></strong> / 
+                                                <strong x-text="tradeData.sellersAgg.totalTao.toFixed(2) + ' τ'"></strong> | 
+                                                Avg: <strong x-text="tradeData.sellersAgg.avgPrice.toFixed(5) + ' τ/α'"></strong>
+                                            </span>
+                                        </template>
+                                    </h5>
+                                    <div class="traders-table-container">
+                                        <template x-if="!tradeData?.sellers?.length">
+                                            <div class="no-traders">No sellers in this period</div>
+                                        </template>
+                                        <template x-if="tradeData?.sellers?.length">
+                                            <table class="traders-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th @click="sortSellers('address')" style="cursor: pointer;">Address<span x-text="getSortIndicator('sellers', 'address')"></span></th>
+                                                        <th @click="sortSellers('net_alpha')" style="cursor: pointer;">Net Alpha<span x-text="getSortIndicator('sellers', 'net_alpha')"></span></th>
+                                                        <th @click="sortSellers('net_tao')" style="cursor: pointer;">Net Tao<span x-text="getSortIndicator('sellers', 'net_tao')"></span></th>
+                                                        <th @click="sortSellers('avg_sell')" style="cursor: pointer;">Avg Sell<span x-text="getSortIndicator('sellers', 'avg_sell')"></span></th>
+                                                        <th @click="sortSellers('buy_count')" style="cursor: pointer;">Buys<span x-text="getSortIndicator('sellers', 'buy_count')"></span></th>
+                                                        <th @click="sortSellers('sell_count')" style="cursor: pointer;">Sells<span x-text="getSortIndicator('sellers', 'sell_count')"></span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(seller, index) in sortedSellers" :key="seller.address">
+                                                        <tr>
+                                                            <td x-text="index + 1"></td>
+                                                            <td class="address-cell">
+                                                                <template x-if="getAddressLabel(seller.address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(seller.address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(seller.address)"
+                                                                      x-text="seller.address.substring(0, 8) + '...' + seller.address.substring(seller.address.length - 6)"></span>
+                                                            </td>
+                                                            <td x-text="seller.net_alpha.toFixed(2) + ' α'"></td>
+                                                            <td x-text="seller.net_tao.toFixed(2) + ' τ'"></td>
+                                                            <td class="price-value" x-text="seller.net_alpha > 0 ? (seller.net_tao / seller.net_alpha).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td class="buy-count" x-text="seller.buy_count"></td>
+                                                            <td class="sell-count" x-text="seller.sell_count"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Gainers and Losers -->
+                            <h4 style="margin-top: 2rem;">Top Gainers & Losers <span>(Excluding Transfers)</span></h4>
+                            <div class="traders-grid">
+                                <!-- Gainers List -->
+                                <div class="traders-section gainers-section">
+                                    <h5>
+                                        📈 Top Gainers (<span x-text="tradeData?.gainers?.length || 0"></span>)
+                                        <template x-if="tradeData?.gainersAgg">
+                                            <span class="section-agg">
+                                                Total Profit: <strong class="positive" x-text="'+' + tradeData.gainersAgg.totalProfit.toFixed(2) + ' τ'"></strong>
+                                            </span>
+                                        </template>
+                                    </h5>
+                                    <div class="traders-table-container">
+                                        <template x-if="!tradeData?.gainers?.length">
+                                            <div class="no-traders">No gainers in this period</div>
+                                        </template>
+                                        <template x-if="tradeData?.gainers?.length">
+                                            <table class="traders-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th @click="sortGainers('address')" style="cursor: pointer;">Address<span x-text="getSortIndicator('gainers', 'address')"></span></th>
+                                                        <th @click="sortGainers('tao_net')" style="cursor: pointer;">Profit<span x-text="getSortIndicator('gainers', 'tao_net')"></span></th>
+                                                        <th @click="sortGainers('tao_bought')" style="cursor: pointer;">Buy<span x-text="getSortIndicator('gainers', 'tao_bought')"></span></th>
+                                                        <th @click="sortGainers('tao_sold')" style="cursor: pointer;">Sell<span x-text="getSortIndicator('gainers', 'tao_sold')"></span></th>
+                                                        <th @click="sortGainers('alpha_bought')" style="cursor: pointer;">Buy<span x-text="getSortIndicator('gainers', 'alpha_bought')"></span></th>
+                                                        <th @click="sortGainers('alpha_sold')" style="cursor: pointer;">Sell<span x-text="getSortIndicator('gainers', 'alpha_sold')"></span></th>
+                                                        <th @click="sortGainers('avg_buy')" style="cursor: pointer;">Avg Buy<span x-text="getSortIndicator('gainers', 'avg_buy')"></span></th>
+                                                        <th @click="sortGainers('avg_sell')" style="cursor: pointer;">Avg Sell<span x-text="getSortIndicator('gainers', 'avg_sell')"></span></th>
+                                                        <th @click="sortGainers('buy_count')" style="cursor: pointer;">Buys<span x-text="getSortIndicator('gainers', 'buy_count')"></span></th>
+                                                        <th @click="sortGainers('sell_count')" style="cursor: pointer;">Sells<span x-text="getSortIndicator('gainers', 'sell_count')"></span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(gainer, index) in sortedGainers" :key="gainer.address">
+                                                        <tr>
+                                                            <td x-text="index + 1"></td>
+                                                            <td class="address-cell">
+                                                                <template x-if="getAddressLabel(gainer.address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(gainer.address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(gainer.address)"
+                                                                      x-text="gainer.address.substring(0, 8) + '...' + gainer.address.substring(gainer.address.length - 6)"></span>
+                                                            </td>
+                                                            <td class="positive" x-text="'+' + gainer.tao_net.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="gainer.tao_bought.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="gainer.tao_sold.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="gainer.alpha_bought.toFixed(2) + ' α'"></td>
+                                                            <td x-text="gainer.alpha_sold.toFixed(2) + ' α'"></td>
+                                                            <td class="price-value" x-text="gainer.alpha_bought > 0 ? (gainer.tao_bought / gainer.alpha_bought).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td class="price-value" x-text="gainer.alpha_sold > 0 ? (gainer.tao_sold / gainer.alpha_sold).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td class="buy-count" x-text="gainer.buy_count"></td>
+                                                            <td class="sell-count" x-text="gainer.sell_count"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </template>
+                                    </div>
+                                </div>
+                                
+                                <!-- Losers List -->
+                                <div class="traders-section losers-section">
+                                    <h5>
+                                        📉 Top Losers (<span x-text="tradeData?.losers?.length || 0"></span>)
+                                        <template x-if="tradeData?.losersAgg">
+                                            <span class="section-agg">
+                                                Total Loss: <strong class="negative" x-text="tradeData.losersAgg.totalLoss.toFixed(2) + ' τ'"></strong>
+                                            </span>
+                                        </template>
+                                    </h5>
+                                    <div class="traders-table-container">
+                                        <template x-if="!tradeData?.losers?.length">
+                                            <div class="no-traders">No losers in this period</div>
+                                        </template>
+                                        <template x-if="tradeData?.losers?.length">
+                                            <table class="traders-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th @click="sortLosers('address')" style="cursor: pointer;">Address<span x-text="getSortIndicator('losers', 'address')"></span></th>
+                                                        <th @click="sortLosers('tao_net')" style="cursor: pointer;">Loss<span x-text="getSortIndicator('losers', 'tao_net')"></span></th>
+                                                        <th @click="sortLosers('tao_bought')" style="cursor: pointer;">Buy<span x-text="getSortIndicator('losers', 'tao_bought')"></span></th>
+                                                        <th @click="sortLosers('tao_sold')" style="cursor: pointer;">Sell<span x-text="getSortIndicator('losers', 'tao_sold')"></span></th>
+                                                        <th @click="sortLosers('alpha_bought')" style="cursor: pointer;">Buy<span x-text="getSortIndicator('losers', 'alpha_bought')"></span></th>
+                                                        <th @click="sortLosers('alpha_sold')" style="cursor: pointer;">Sell<span x-text="getSortIndicator('losers', 'alpha_sold')"></span></th>
+                                                        <th @click="sortLosers('avg_buy')" style="cursor: pointer;">Avg Buy<span x-text="getSortIndicator('losers', 'avg_buy')"></span></th>
+                                                        <th @click="sortLosers('avg_sell')" style="cursor: pointer;">Avg Sell<span x-text="getSortIndicator('losers', 'avg_sell')"></span></th>
+                                                        <th @click="sortLosers('buy_count')" style="cursor: pointer;">Buys<span x-text="getSortIndicator('losers', 'buy_count')"></span></th>
+                                                        <th @click="sortLosers('sell_count')" style="cursor: pointer;">Sells<span x-text="getSortIndicator('losers', 'sell_count')"></span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(loser, index) in sortedLosers" :key="loser.address">
+                                                        <tr>
+                                                            <td x-text="index + 1"></td>
+                                                            <td class="address-cell">
+                                                                <template x-if="getAddressLabel(loser.address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(loser.address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(loser.address)"
+                                                                      x-text="loser.address.substring(0, 8) + '...' + loser.address.substring(loser.address.length - 6)"></span>
+                                                            </td>
+                                                            <td class="negative" x-text="loser.tao_net.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="loser.tao_bought.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="loser.tao_sold.toFixed(2) + ' τ'"></td>
+                                                            <td x-text="loser.alpha_bought.toFixed(2) + ' α'"></td>
+                                                            <td x-text="loser.alpha_sold.toFixed(2) + ' α'"></td>
+                                                            <td class="price-value" x-text="loser.alpha_bought > 0 ? (loser.tao_bought / loser.alpha_bought).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td class="price-value" x-text="loser.alpha_sold > 0 ? (loser.tao_sold / loser.alpha_sold).toFixed(5) + ' τ/α' : 'N/A'"></td>
+                                                            <td class="buy-count" x-text="loser.buy_count"></td>
+                                                            <td class="sell-count" x-text="loser.sell_count"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Top Transfers -->
+                            <h4 style="margin-top: 2rem;">Top Transfers</h4>
+                            <div class="traders-section transfers-section">
+                                <h5>🔄 Top Transfer Pairs (<span x-text="tradeData?.transfers?.length || 0"></span>)</h5>
+                                <div class="traders-table-container">
+                                    <template x-if="!tradeData?.transfers?.length">
+                                        <div class="no-traders">No transfers in this period</div>
+                                    </template>
+                                    <template x-if="tradeData?.transfers?.length">
+                                        <table class="traders-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>From Address</th>
+                                                    <th>To Address</th>
+                                                    <th>Total TAO</th>
+                                                    <th>Transfer Count</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(transfer, index) in tradeData?.transfers" :key="index">
+                                                    <tr>
+                                                        <td x-text="index + 1"></td>
+                                                        <td>
+                                                            <div class="address-cell">
+                                                                <template x-if="getAddressLabel(transfer.from_address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(transfer.from_address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(transfer.from_address)"
+                                                                      x-text="transfer.from_address.substring(0, 8) + '...' + transfer.from_address.substring(transfer.from_address.length - 6)"></span>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div class="address-cell">
+                                                                <template x-if="getAddressLabel(transfer.to_address)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(transfer.to_address)"></span>
+                                                                </template>
+                                                                <span class="trader-address clickable-address" 
+                                                                      @click="openAddressModal(transfer.to_address)"
+                                                                      x-text="transfer.to_address.substring(0, 8) + '...' + transfer.to_address.substring(transfer.to_address.length - 6)"></span>
+                                                            </div>
+                                                        </td>
+                                                        <td x-text="transfer.total_tao_amount.toFixed(2) + ' τ'"></td>
+                                                        <td x-text="transfer.transfer_count"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subnet Info Section (from subnets-cacher snapshot) -->
+            <div class="card" x-show="subnetInfo" x-cloak>
+                <div class="card-header">
+                    <h2>
+                        <span style="color: var(--text-secondary); margin-right: 0.5rem;">SN <span x-text="netuid"></span></span>
+                        <template x-if="subnetInfo?.subnet_identity?.subnet_name">
+                            <span x-text="subnetInfo.subnet_identity.subnet_name"></span>
+                        </template>
+                    </h2>
+                    <div class="update-info" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span x-show="subnetInfoBlock">Snapshot at block <strong x-text="subnetInfoBlock"></strong></span>
+                        <span class="live-indicator" :class="liveConnected ? 'live-on' : 'live-off'" :title="liveConnected ? 'Live (WebSocket connected)' : 'Disconnected — reconnecting…'">
+                            <span class="live-dot"></span>
+                            <span class="live-label" x-text="liveConnected ? 'Live' : 'Offline'"></span>
+                        </span>
+                    </div>
+                </div>
+
+                <template x-if="subnetInfo?.subnet_identity?.description">
+                    <p style="color: var(--text-secondary); margin: 0 0 1rem 0;" x-text="subnetInfo.subnet_identity.description"></p>
+                </template>
+
+                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-label">Price</div>
+                        <div class="stat-value" x-text="subnetInfo ? Number(subnetInfo.price).toFixed(5) + ' τ/α' : '—'"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Liq Price</div>
+                        <div class="stat-value" x-text="subnetInfo ? Number(subnetInfo.liq_price).toFixed(5) + ' τ/α' : '—'"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">TAO In</div>
+                        <div class="stat-value" x-text="subnetInfo ? formatAmount(subnetInfo.tao_in) + ' τ' : '—'"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Alpha In</div>
+                        <div class="stat-value" x-text="subnetInfo ? formatAmount(subnetInfo.alpha_in) + ' α' : '—'"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Alpha Out</div>
+                        <div class="stat-value" x-text="subnetInfo ? formatAmount(subnetInfo.alpha_out) + ' α' : '—'"></div>
+                    </div>
+                    <div class="stat-card" title="Share of total network EMA TAO flow">
+                        <div class="stat-label">Total Emission</div>
+                        <div class="stat-value" x-text="subnetInfo?.total_emission != null ? (Number(subnetInfo.total_emission) * 100).toFixed(2) + '%' : '—'"></div>
+                    </div>
+                    <div class="stat-card" title="(0.5 × total_emission − tao_in_emission) × 7200 (TAO/day)">
+                        <div class="stat-label">Chain Buy</div>
+                        <div class="stat-value" :class="subnetInfo?.chain_buy != null && Number(subnetInfo.chain_buy) < 0 ? 'negative' : ''" x-text="subnetInfo?.chain_buy != null ? formatAmount(subnetInfo.chain_buy) + ' τ/d' : '—'"></div>
+                    </div>
+                    <div class="stat-card" :title="subnetInfo ? 'Block #' + subnetInfo.registered_at : ''">
+                        <div class="stat-label">Registered At</div>
+                        <div class="stat-value" x-text="subnetInfo ? formatUtc(subnetInfo.registered_at_timestamp) : '—'"></div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;" x-text="subnetInfo ? formatLocal(subnetInfo.registered_at_timestamp) : ''"></div>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3>Owners</h3>
+                    <div class="api-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Coldkey</div>
+                            <template x-if="subnetInfo?.owner_coldkey">
+                                <span class="trader-address clickable-address"
+                                      @click="openAddressModal(subnetInfo.owner_coldkey)"
+                                      x-text="subnetInfo.owner_coldkey.substring(0,8) + '...' + subnetInfo.owner_coldkey.substring(subnetInfo.owner_coldkey.length-6)"></span>
+                            </template>
+                            <template x-if="!subnetInfo?.owner_coldkey">
+                                <span style="color: var(--text-tertiary);">—</span>
+                            </template>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Hotkey</div>
+                            <template x-if="subnetInfo?.owner_hotkey">
+                                <span class="trader-address clickable-address"
+                                      @click="openAddressModal(subnetInfo.owner_hotkey)"
+                                      x-text="subnetInfo.owner_hotkey.substring(0,8) + '...' + subnetInfo.owner_hotkey.substring(subnetInfo.owner_hotkey.length-6)"></span>
+                            </template>
+                            <template x-if="!subnetInfo?.owner_hotkey">
+                                <span style="color: var(--text-tertiary);">—</span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <template x-if="hasIdentityLinks()">
+                    <div class="info-section">
+                        <h3>Links</h3>
+                        <div class="api-grid">
+                            <template x-if="subnetInfo?.subnet_identity?.subnet_url">
+                                <a class="stat-card" :href="subnetInfo.subnet_identity.subnet_url" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">
+                                    <div class="stat-label">Website</div>
+                                    <div style="word-break: break-all;" x-text="subnetInfo.subnet_identity.subnet_url"></div>
+                                </a>
+                            </template>
+                            <template x-if="subnetInfo?.subnet_identity?.github_repo">
+                                <a class="stat-card" :href="subnetInfo.subnet_identity.github_repo" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">
+                                    <div class="stat-label">GitHub</div>
+                                    <div style="word-break: break-all;" x-text="subnetInfo.subnet_identity.github_repo"></div>
+                                </a>
+                            </template>
+                            <template x-if="subnetInfo?.subnet_identity?.discord">
+                                <div class="stat-card">
+                                    <div class="stat-label">Discord</div>
+                                    <div style="word-break: break-all;" x-text="subnetInfo.subnet_identity.discord"></div>
+                                </div>
+                            </template>
+                            <template x-if="subnetInfo?.subnet_identity?.subnet_contact">
+                                <div class="stat-card">
+                                    <div class="stat-label">Contact</div>
+                                    <div style="word-break: break-all;" x-text="subnetInfo.subnet_identity.subnet_contact"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+        </main>
+
+        <!-- Address Modal -->
+        <div x-show="addressModalOpen" 
+             x-transition.opacity
+             class="address-modal-overlay"
+             @click.self="closeAddressModal()">
+            <div class="address-modal" @click.away="closeAddressModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">Address Details</h3>
+                    <button @click="closeAddressModal()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Full Address -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Address</div>
+                        <div class="address-modal-address">
+                            <span x-text="selectedAddress"></span>
+                            <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                        </div>
+                    </div>
+
+                    <!-- Label Management -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Label</div>
+                        <div x-show="!editingLabel">
+                            <div class="address-modal-label-display">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                        <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                    </template>
+                                    <template x-if="modalLabelCache">
+                                        <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                    </template>
+                                    <template x-if="!modalLabelCache">
+                                        <span class="address-modal-no-label">No label set</span>
+                                    </template>
+                                    <template x-if="modalTypeCache">
+                                        <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                    </template>
+                                </div>
+                                <div style="margin-left: auto;" class="address-modal-label-actions">
+                                    <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                        <span x-show="!modalLabelCache">➕ Add</span>
+                                        <span x-show="modalLabelCache">✏️ Edit</span>
+                                    </button>
+                                    <template x-if="modalLabelCache">
+                                        <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div x-show="editingLabel">
+                            <div class="address-modal-label-form">
+                                <input 
+                                    type="text" 
+                                    x-model="labelInput"
+                                    @keydown.enter="saveLabelFromModal()"
+                                    @keydown.escape="cancelEditingLabel()"
+                                    class="address-modal-label-input"
+                                    placeholder="Enter label..."
+                                    x-ref="labelInput"
+                                >
+                                <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                    <option value="">No type</option>
+                                    <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                        <option :value="typeName" x-text="typeName"></option>
+                                    </template>
+                                </select>
+                                <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                                <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="address-modal-actions">
+                        <a :href="`/account/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-primary"
+                           target="_blank">
+                           💼 Account Page
+                        </a>
+                        <a :href="`/strategy/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🧠 Strategy
+                        </a>
+                        <a :href="`/connections/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🔗 Connections
+                        </a>
+                        <a :href="`https://taostats.io/account/${selectedAddress}`" 
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            🌐 Taostats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/subnet.js"></script>
+</body>
+</html>
+

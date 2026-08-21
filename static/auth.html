@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        /* Additional auth-specific styles */
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-secondary);
+            padding: 2rem;
+        }
+        
+        .auth-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .auth-header h1 {
+            font-size: 2rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .auth-header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+        
+        .auth-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 0.75rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .auth-tab:hover {
+            color: var(--text-primary);
+        }
+        
+        .auth-tab.active {
+            color: var(--primary-color);
+        }
+        
+        .auth-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary-color);
+        }
+        
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .form-group label {
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .form-input {
+            padding: 0.875rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .form-input::placeholder {
+            color: var(--text-tertiary);
+        }
+        
+        .auth-button {
+            padding: 0.875rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 0.5rem;
+        }
+        
+        .auth-button:hover:not(:disabled) {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+        
+        .auth-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            padding: 0.875rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error-color);
+            border-radius: var(--radius-md);
+            color: var(--error-color);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
+        .success-message {
+            padding: 0.875rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success-color);
+            border-radius: var(--radius-md);
+            color: var(--success-color);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
+        .password-requirements {
+            font-size: 0.85rem;
+            color: var(--text-tertiary);
+            padding-left: 1rem;
+        }
+        
+        .password-requirements li {
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container" x-data="authApp()">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>AlphaStats</h1>
+                <p>Advanced analytics for dTao Alpha trading</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button 
+                    class="auth-tab" 
+                    :class="{ active: activeTab === 'login' }"
+                    @click="activeTab = 'login'; error = ''"
+                >
+                    Sign In
+                </button>
+                <button 
+                    class="auth-tab" 
+                    :class="{ active: activeTab === 'signup' }"
+                    @click="activeTab = 'signup'; error = ''"
+                >
+                    Sign Up
+                </button>
+            </div>
+            
+            <!-- Error Message -->
+            <div x-show="error" class="error-message" x-text="error" style="margin-bottom: 1rem;"></div>
+            
+            <!-- Success Message -->
+            <div x-show="success" class="success-message" x-text="success" style="margin-bottom: 1rem;"></div>
+            
+            <!-- Login Form -->
+            <form x-show="activeTab === 'login'" @submit.prevent="handleLogin" class="auth-form">
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input 
+                        type="email" 
+                        id="login-email"
+                        x-model="loginForm.email"
+                        class="form-input"
+                        placeholder="Enter your email"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input 
+                        type="password" 
+                        id="login-password"
+                        x-model="loginForm.password"
+                        class="form-input"
+                        placeholder="Enter your password"
+                        required
+                    >
+                </div>
+                
+                <button 
+                    type="submit" 
+                    class="auth-button"
+                    :disabled="loading"
+                >
+                    <span x-show="!loading">Sign In</span>
+                    <span x-show="loading">Signing in...</span>
+                </button>
+            </form>
+            
+            <!-- Signup Form -->
+            <form x-show="activeTab === 'signup'" @submit.prevent="handleSignup" class="auth-form">
+                <div class="form-group">
+                    <label for="signup-email">Email</label>
+                    <input 
+                        type="email" 
+                        id="signup-email"
+                        x-model="signupForm.email"
+                        class="form-input"
+                        placeholder="Enter your email"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="signup-password">Password</label>
+                    <input 
+                        type="password" 
+                        id="signup-password"
+                        x-model="signupForm.password"
+                        class="form-input"
+                        placeholder="Create a password"
+                        minlength="8"
+                        maxlength="72"
+                        required
+                    >
+                    <ul class="password-requirements">
+                        <li>Between 8 and 72 characters</li>
+                    </ul>
+                </div>
+                
+                <div class="form-group">
+                    <label for="signup-confirm-password">Confirm Password</label>
+                    <input 
+                        type="password" 
+                        id="signup-confirm-password"
+                        x-model="signupForm.confirmPassword"
+                        class="form-input"
+                        placeholder="Confirm your password"
+                        minlength="8"
+                        maxlength="72"
+                        required
+                    >
+                </div>
+                
+                <button 
+                    type="submit" 
+                    class="auth-button"
+                    :disabled="loading"
+                >
+                    <span x-show="!loading">Create Account</span>
+                    <span x-show="loading">Creating account...</span>
+                </button>
+            </form>
+            
+            <!-- Anonymous Access -->
+            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); text-align: center;">
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                    Or continue without signing in
+                </p>
+                <button 
+                    @click="handleAnonymous"
+                    class="auth-button"
+                    style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color);"
+                    :disabled="loading"
+                >
+                    <span x-show="!loading">Continue as Anonymous</span>
+                    <span x-show="loading">Creating account...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function authApp() {
+            return {
+                activeTab: 'login',
+                loading: false,
+                error: '',
+                success: '',
+                loginForm: {
+                    email: '',
+                    password: ''
+                },
+                signupForm: {
+                    email: '',
+                    password: '',
+                    confirmPassword: ''
+                },
+                
+                init() {
+                    // Check if user is already logged in
+                    const token = localStorage.getItem('auth_token');
+                    if (token) {
+                        this.verifyToken(token);
+                    }
+                },
+                
+                async verifyToken(token) {
+                    try {
+                        const response = await fetch('/api/v1/auth/me', {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            // User is already logged in, redirect to home
+                            window.location.href = '/home';
+                        } else {
+                            // Token is invalid, remove it
+                            localStorage.removeItem('auth_token');
+                        }
+                    } catch (error) {
+                        console.error('Token verification failed:', error);
+                        localStorage.removeItem('auth_token');
+                    }
+                },
+                
+                async handleLogin() {
+                    this.error = '';
+                    this.success = '';
+                    this.loading = true;
+                    
+                    try {
+                        const response = await fetch('/api/v1/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                email: this.loginForm.email,
+                                password: this.loginForm.password
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Store token
+                            localStorage.setItem('auth_token', data.access_token);
+                            
+                            // Show success and redirect
+                            this.success = 'Login successful! Redirecting...';
+                            setTimeout(() => {
+                                window.location.href = '/home';
+                            }, 500);
+                        } else {
+                            this.error = data.detail || 'Login failed. Please try again.';
+                        }
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        this.error = 'Network error. Please check your connection and try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async handleSignup() {
+                    this.error = '';
+                    this.success = '';
+                    
+                    // Validate password match
+                    if (this.signupForm.password !== this.signupForm.confirmPassword) {
+                        this.error = 'Passwords do not match.';
+                        return;
+                    }
+                    
+                    // Validate password length
+                    if (this.signupForm.password.length < 8) {
+                        this.error = 'Password must be at least 8 characters long.';
+                        return;
+                    }
+                    
+                    if (this.signupForm.password.length > 72) {
+                        this.error = 'Password must not exceed 72 characters.';
+                        return;
+                    }
+                    
+                    this.loading = true;
+                    
+                    try {
+                        const response = await fetch('/api/v1/auth/signup', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                email: this.signupForm.email,
+                                password: this.signupForm.password
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Store token
+                            localStorage.setItem('auth_token', data.access_token);
+                            
+                            // Show success and redirect
+                            this.success = 'Account created successfully! Redirecting...';
+                            setTimeout(() => {
+                                window.location.href = '/home';
+                            }, 500);
+                        } else {
+                            this.error = data.detail || 'Signup failed. Please try again.';
+                        }
+                    } catch (error) {
+                        console.error('Signup error:', error);
+                        this.error = 'Network error. Please check your connection and try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async handleAnonymous() {
+                    this.error = '';
+                    this.success = '';
+                    this.loading = true;
+                    
+                    try {
+                        const response = await fetch('/api/v1/auth/anonymous', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Store token
+                            localStorage.setItem('auth_token', data.access_token);
+                            
+                            // Show success and redirect
+                            this.success = 'Anonymous account created! Redirecting...';
+                            setTimeout(() => {
+                                window.location.href = '/home';
+                            }, 500);
+                        } else {
+                            this.error = data.detail || 'Failed to create anonymous account. Please try again.';
+                        }
+                    } catch (error) {
+                        console.error('Anonymous account creation error:', error);
+                        this.error = 'Network error. Please check your connection and try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Addresses | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+</head>
+<body>
+    <div class="container" x-data="addressManagementApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>🏷️ Address Management</h1>
+                    <p class="subtitle">Label and manage blockchain addresses</p>
+                    <a href="/home" class="back-link">← Back to Home</a>
+                </div>
+                <div class="header-controls">
+                    <button 
+                        @click="updateDefaultAddresses()" 
+                        class="btn-primary"
+                        :disabled="isUpdatingDefaults"
+                        style="margin-right: 1rem;"
+                    >
+                        <span x-show="!isUpdatingDefaults">🔄 Update Default Addresses</span>
+                        <span x-show="isUpdatingDefaults">⏳ Updating...</span>
+                    </button>
+                    <span class="address-count" x-text="labels.length + ' labeled address' + (labels.length !== 1 ? 'es' : '')"></span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Add New Label Card -->
+            <div class="card">
+                <h2>Add New Label</h2>
+                <form @submit.prevent="addLabel()" class="address-form">
+                    <div class="form-row">
+                        <input 
+                            type="text" 
+                            x-model="newAddress" 
+                            placeholder="Enter address (e.g., 5F3sa2TJAWMqDhX...)" 
+                            class="input-field"
+                            required
+                        >
+                        <input 
+                            type="text" 
+                            x-model="newLabel" 
+                            placeholder="Enter label (e.g., My Wallet)" 
+                            class="input-field"
+                            required
+                        >
+                        <select x-model="newType" class="input-field">
+                            <option value="">No type</option>
+                            <template x-for="[typeName, color] in Object.entries(types)" :key="typeName">
+                                <option :value="typeName" x-text="typeName"></option>
+                            </template>
+                        </select>
+                        <button type="submit" class="btn-primary">Add Label</button>
+                    </div>
+                </form>
+                <div x-show="message" x-transition class="message" :class="messageType" x-text="message"></div>
+            </div>
+
+            <!-- Type Management Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Address Types</h2>
+                    <button @click="showTypeManagement = !showTypeManagement" class="btn-secondary">
+                        <span x-show="!showTypeManagement">🎨 Manage Types</span>
+                        <span x-show="showTypeManagement">✕ Close</span>
+                    </button>
+                </div>
+
+                <div x-show="showTypeManagement" x-transition>
+                    <!-- Add New Type Form -->
+                    <div style="margin-bottom: 1.5rem; padding: 1rem; background: var(--card-bg); border-radius: 0.5rem; border: 1px solid var(--border);">
+                        <h3 style="margin-bottom: 0.75rem; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);">Add New Type</h3>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input 
+                                type="text" 
+                                x-model="newTypeName" 
+                                placeholder="Type name (e.g., exchange)" 
+                                class="input-field"
+                                style="flex: 1;"
+                            >
+                            <input 
+                                type="color" 
+                                x-model="newTypeColor" 
+                                class="input-field"
+                                style="width: 80px; height: 40px; padding: 0.25rem; cursor: pointer;"
+                            >
+                            <button @click="addNewType()" class="btn-primary">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Type List -->
+                    <div style="display: grid; gap: 0.5rem;">
+                        <template x-for="[typeName, color] in Object.entries(types)" :key="typeName">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: var(--card-bg); border-radius: 0.5rem; border: 1px solid var(--border);">
+                                <template x-if="editingType !== typeName">
+                                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+                                        <div :style="`width: 24px; height: 24px; border-radius: 0.25rem; background-color: ${color};`"></div>
+                                        <span style="font-weight: 500;" x-text="typeName"></span>
+                                        <span x-show="isDefaultType(typeName)" style="font-size: 0.75rem; color: var(--text-tertiary);">🔒 Default</span>
+                                    </div>
+                                </template>
+
+                                <template x-if="editingType === typeName">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+                                        <input 
+                                            type="text" 
+                                            x-model="editTypeName" 
+                                            class="input-field input-small"
+                                            style="flex: 1;"
+                                        >
+                                        <input 
+                                            type="color" 
+                                            x-model="editTypeColor" 
+                                            class="input-field"
+                                            style="width: 60px; height: 32px; padding: 0.125rem; cursor: pointer;"
+                                        >
+                                        <button @click="saveEditType(typeName)" class="btn-small btn-primary">💾 Save</button>
+                                        <button @click="cancelEditType()" class="btn-small btn-secondary">✕</button>
+                                    </div>
+                                </template>
+
+                                <template x-if="editingType !== typeName && !isDefaultType(typeName)">
+                                    <div style="display: flex; gap: 0.25rem;">
+                                        <button @click="startEditType(typeName)" class="btn-icon" title="Edit">✏️</button>
+                                        <button @click="removeType(typeName)" class="btn-icon btn-icon-danger" title="Remove">🗑️</button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="Object.keys(types).length === 0">
+                            <div style="text-align: center; padding: 1rem; color: var(--text-tertiary);">
+                                <p>No types defined. Add one above to categorize your addresses.</p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search and Filter Card -->
+            <div class="card">
+                <h2>Search Addresses</h2>
+                <div class="search-bar">
+                    <input 
+                        type="text" 
+                        x-model="searchQuery" 
+                        @input="performSearch()"
+                        placeholder="Search by address or label..." 
+                        class="input-field search-input"
+                    >
+                    <template x-if="searchQuery">
+                        <button @click="clearSearch()" class="btn-clear">✕ Clear</button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Labeled Addresses List -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Labeled Addresses</h2>
+                    <div class="address-actions">
+                        <button @click="showImportExport = !showImportExport" class="btn-secondary">
+                            <span x-show="!showImportExport">📥 Import/Export</span>
+                            <span x-show="showImportExport">✕ Close</span>
+                        </button>
+                        <template x-if="getTabCount('user') > 0">
+                            <button @click="confirmClearAll()" class="btn-danger">🗑️ Clear All User Labels</button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="address-tabs">
+                    <button 
+                        @click="switchTab('all')" 
+                        class="tab-button"
+                        :class="{ 'active': activeTab === 'all' }"
+                    >
+                        📋 All (<span x-text="getTabCount('all')"></span>)
+                    </button>
+                    <button 
+                        @click="switchTab('user')" 
+                        class="tab-button"
+                        :class="{ 'active': activeTab === 'user' }"
+                    >
+                        ✏️ User Labels (<span x-text="getTabCount('user')"></span>)
+                    </button>
+                    <button 
+                        @click="switchTab('default')" 
+                        class="tab-button"
+                        :class="{ 'active': activeTab === 'default' }"
+                    >
+                        🔒 Default Labels (<span x-text="getTabCount('default')"></span>)
+                    </button>
+                </div>
+
+                <!-- Import/Export Section -->
+                <div x-show="showImportExport" x-transition class="import-export-section">
+                    <h3>Import/Export Labels</h3>
+                    <div class="import-export-actions">
+                        <button @click="exportLabels()" class="btn-primary">📤 Export to JSON</button>
+                        <button @click="exportLabelsToClipboard()" class="btn-primary">📋 Export to Clipboard</button>
+                        <label class="btn-primary" style="cursor: pointer;">
+                            📥 Import from JSON
+                            <input
+                                type="file"
+                                @change="importLabels($event)"
+                                accept=".json"
+                                style="display: none;"
+                            >
+                        </label>
+                    </div>
+                    <div class="import-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" x-model="importMerge">
+                            <span>Merge with existing labels (instead of replacing)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Address List -->
+                <template x-if="filteredLabels.length === 0 && getTabCount(activeTab) === 0">
+                    <div class="empty-state">
+                        <template x-if="activeTab === 'all'">
+                            <div>
+                                <p>No labeled addresses yet.</p>
+                                <p class="empty-hint">Add your first label using the form above or update default addresses.</p>
+                            </div>
+                        </template>
+                        <template x-if="activeTab === 'user'">
+                            <div>
+                                <p>No user labels yet.</p>
+                                <p class="empty-hint">Add your first label using the form above.</p>
+                            </div>
+                        </template>
+                        <template x-if="activeTab === 'default'">
+                            <div>
+                                <p>No default labels loaded.</p>
+                                <p class="empty-hint">Click "Update Default Addresses" to fetch subnet owner addresses.</p>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <template x-if="filteredLabels.length === 0 && getTabCount(activeTab) > 0">
+                    <div class="empty-state">
+                        <p>No addresses match your search in this tab.</p>
+                    </div>
+                </template>
+
+                <template x-if="filteredLabels.length > 0">
+                    <div class="address-list">
+                        <template x-for="item in filteredLabels" :key="item.address">
+                            <div class="address-item" :class="{ 'editing': editingAddress === item.address, 'default-label': item.isDefault }">
+                                <div class="address-info">
+                                    <div class="address-label-display">
+                                        <template x-if="item.type && getTypeColor(item.type)">
+                                            <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getTypeColor(item.type)}; flex-shrink: 0;`"></div>
+                                        </template>
+                                        <span class="label-badge" :class="{ 'default-badge': item.isDefault }" x-text="item.label"></span>
+                                        <template x-if="item.type">
+                                            <span style="font-size: 0.75rem; color: var(--text-tertiary); margin-left: 0.25rem;" x-text="`(${item.type})`"></span>
+                                        </template>
+                                        <span x-show="item.isDefault" class="readonly-badge" title="Read-only default label">🔒</span>
+                                    </div>
+                                    <div class="address-text" x-text="item.address"></div>
+                                </div>
+                                
+                                <div x-show="editingAddress !== item.address" class="address-actions-inline">
+                                    <button x-show="!item.isDefault" @click="startEdit(item)" class="btn-icon" title="Edit">✏️</button>
+                                    <button @click="copyAddress(item.address)" class="btn-icon" title="Copy Address">📋</button>
+                                    <button x-show="!item.isDefault" @click="removeLabel(item.address)" class="btn-icon btn-icon-danger" title="Remove Label">🗑️</button>
+                                </div>
+
+                                <div x-show="editingAddress === item.address" class="edit-form">
+                                    <input 
+                                        type="text" 
+                                        x-model="editLabel" 
+                                        @keydown.enter="saveEdit(item.address)"
+                                        @keydown.escape="cancelEdit()"
+                                        class="input-field input-small"
+                                        placeholder="Enter new label"
+                                    >
+                                    <select x-model="editType" class="input-field input-small">
+                                        <option value="">No type</option>
+                                        <template x-for="[typeName, color] in Object.entries(types)" :key="typeName">
+                                            <option :value="typeName" x-text="typeName"></option>
+                                        </template>
+                                    </select>
+                                    <button @click="saveEdit(item.address)" class="btn-small btn-primary">💾 Save</button>
+                                    <button @click="cancelEdit()" class="btn-small btn-secondary">✕</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                    <p style="font-size: 0.75rem; margin-top: 0.25rem; color: var(--text-tertiary);">
+                        Address labels are stored locally in your browser 
+                        <span style="opacity: 0.5; margin-left: 0.5rem;" x-data x-text="'(' + (typeof addressLabels !== 'undefined' ? addressLabels.getVersion() : 'unknown') + ')'"></span>
+                    </p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/addresses.js"></script>
+</body>
+</html>
+

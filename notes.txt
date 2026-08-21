@@ -1,0 +1,99 @@
+# Run local subtensor using docker
+./scripts/run/subtensor.sh -e docker --network mainnet --node-type lite
+
+# Postgres Backup
+docker exec -e PGPASSWORD=1415926535Alphastats 85eca151ae53 pg_dump -U ron141592 alaphstats > alaphstats_backup.sql
+
+# Redis Backup
+docker exec ce938beb5386 redis-cli SAVE
+docker cp ce938beb5386:/data/dump.rdb ./dump.rdb
+
+
+# Postgres Restore
+docker cp ./_backup/analphysis_backup.sql 484d72dc4ae2:/backup.sql
+docker exec -it 484d72dc4ae2 bash
+psql -U ron141592 -d analphysis -f /backup.sql
+
+# Redis Restore
+docker stop 6749ef132a1e
+docker cp ./_backup/dump.rdb 6749ef132a1e:/data/dump.rdb
+docker start 6749ef132a1e
+
+
+# sql query for trades in a time frame
+
+```sql
+SELECT
+	address,
+    SUM(CASE
+        	WHEN is_sell THEN -alpha
+        	ELSE alpha
+		END) / 10^9 AS total_alpha,
+	SUM(CASE
+        	WHEN is_sell THEN -tao
+        	ELSE tao
+		END) / 10^9 AS total_tao
+FROM
+	trades
+WHERE
+	netuid = 79
+    AND timestamp BETWEEN '2025-12-11 00:00:00' AND '2026-01-01 00:00:00'
+GROUP BY
+	address
+ORDER BY
+	total_alpha DESC
+LIMIT 100
+```
+
+
+# sql query for pure move updates
+
+```sql
+WITH pure_move_pairs AS (
+    SELECT t1.id as sell_id, t2.id as buy_id
+    FROM trades t1
+    JOIN trades t2 ON t2.id = t1.id + 1
+    WHERE 
+        t1.is_sell = true
+        AND t1.is_moved = true
+        AND t2.is_sell = false
+        AND t2.is_moved = true
+        AND t1.netuid = t2.netuid
+        AND t1.block_number = t2.block_number
+)
+UPDATE trades
+SET is_pure_move = true
+WHERE id IN (
+    SELECT sell_id FROM pure_move_pairs
+    UNION
+    SELECT buy_id FROM pure_move_pairs
+);
+```
+
+
+
+
+## nginx config for local
+
+# Generate self-signed SSL certificate for IP address
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/alphastats-selfsigned.key \
+  -out /etc/ssl/certs/alphastats-selfsigned.crt \
+  -subj "/C=US/ST=State/L=City/O=AlphaStats/CN=67.213.113.23" \
+  -addext "subjectAltName=IP:67.213.113.23"
+
+# Set proper permissions
+sudo chmod 600 /etc/ssl/private/alphastats-selfsigned.key
+sudo chmod 644 /etc/ssl/certs/alphastats-selfsigned.crt
+
+# Copy nginx config
+sudo cp /home/ubuntu/alphastats-io/server/nginx-config.local /etc/nginx/sites-available/alphastats
+
+# Enable the site
+sudo ln -sf /etc/nginx/sites-available/alphastats /etc/nginx/sites-enabled/
+
+# Test nginx configuration
+sudo nginx -t
+
+# Reload nginx
+sudo systemctl reload nginx

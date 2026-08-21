@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+    <script src="/static/js/account.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div class="container" x-data="accountApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>💼 Account Details</h1>
+                    <div class="address-display" style="margin-top: 0.5rem;">
+                        <code class="address-code clickable-address" 
+                              @click="openAddressModal(coldkeyAddress)" 
+                              x-text="coldkeyAddress"
+                              style="cursor: pointer;"></code>
+                        <template x-if="getAddressLabel(coldkeyAddress)">
+                            <span class="trader-label-badge" x-text="getAddressLabel(coldkeyAddress)" style="margin-left: 0.5rem;"></span>
+                        </template>
+                        <button @click="copyAddress(coldkeyAddress)" class="btn-icon" title="Copy Address">📋</button>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 1rem;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a href="/addresses" class="back-link">🏷️ Manage Addresses</a>
+                    </div>
+                </div>
+                <!-- <div class="header-controls">
+                    <span x-show="!loading && !error" class="stat-badge">
+                        <span style="color: var(--text-secondary); font-size: 0.875rem;">Total Balance</span>
+                        <strong style="display: block; font-size: 1.5rem; color: var(--primary-color);" x-text="totalTao.toFixed(2) + ' ⍺'"></strong>
+                    </span>
+                </div> -->
+            </div>
+        </header>
+
+        <main>
+            <!-- Loading State -->
+            <template x-if="loading">
+                <div class="card">
+                    <div style="text-align: center; padding: 2rem;">
+                        <div class="loading-spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--text-secondary);">Loading stake information...</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Error State -->
+            <template x-if="error">
+                <div class="card">
+                    <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                        <strong>Error:</strong> <span x-text="error"></span>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Summary Stats -->
+            <template x-if="!loading && !error">
+                <div class="card">
+                    <h2>Balance Summary</h2>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Total Balance</div>
+                            <div class="stat-value" x-text="totalTao.toFixed(2) + ' τ'"></div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Free Balance</div>
+                            <div class="stat-value" x-text="freeTao.toFixed(2) + ' τ'"></div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Total Staked</div>
+                            <div class="stat-value" x-text="totalStakedTao.toFixed(2) + ' τ'"></div>
+                        </div>
+                        <!-- <div class="stat-box" x-show="stakes.length > 0">
+                            <div class="stat-label">Stake Positions</div>
+                            <div class="stat-value" x-text="stakes.length"></div>
+                        </div>
+                        <div class="stat-box" x-show="stakes.length > 0">
+                            <div class="stat-label">Unique Subnets</div>
+                            <div class="stat-value" x-text="uniqueSubnets"></div>
+                        </div>
+                        <div class="stat-box" x-show="stakes.length > 0">
+                            <div class="stat-label">Largest Position</div>
+                            <div class="stat-value" x-text="largestStake.toFixed(2) + ' ⍺'"></div>
+                        </div> -->
+                    </div>
+                </div>
+            </template>
+
+            <!-- Proxy Information -->
+            <template x-if="!loading && !error">
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <h2>Proxy Information</h2>
+                            <span class="subtitle"
+                                  x-text="(proxiesOutgoing.length + proxiesIncoming.length) + ' relationship' + ((proxiesOutgoing.length + proxiesIncoming.length) !== 1 ? 's' : '')"></span>
+                        </div>
+                        <button @click="loadProxies()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+
+                    <template x-if="proxiesLoading">
+                        <div style="text-align: center; padding: 2rem;">
+                            <div class="loading-spinner"></div>
+                            <p style="margin-top: 1rem; color: var(--text-secondary);">Loading proxy info...</p>
+                        </div>
+                    </template>
+
+                    <template x-if="!proxiesLoading && proxiesError">
+                        <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                            <span x-text="proxiesError"></span>
+                        </div>
+                    </template>
+
+                    <template x-if="!proxiesLoading && !proxiesError">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <!-- Outgoing: proxies this account added -->
+                            <div>
+                                <h3 style="margin-bottom: 0.75rem; font-size: 1rem;">
+                                    Proxies added by this account
+                                    <span class="subtitle" x-text="'(' + proxiesOutgoing.length + ')'" style="font-weight: normal;"></span>
+                                </h3>
+                                <template x-if="proxiesOutgoing.length === 0">
+                                    <div class="empty-state" style="padding: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+                                        No proxies added.
+                                    </div>
+                                </template>
+                                <template x-if="proxiesOutgoing.length > 0">
+                                    <div class="traders-table-container">
+                                        <table class="traders-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Delegate</th>
+                                                    <th>Proxy Type</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(p, index) in proxiesOutgoing" :key="'out-' + index">
+                                                    <tr>
+                                                        <td>
+                                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                                <code class="address-short clickable-address"
+                                                                      @click="openAddressModal(p.delegate)"
+                                                                      x-text="formatAddress(p.delegate)"
+                                                                      style="cursor: pointer;"></code>
+                                                                <template x-if="getAddressLabel(p.delegate)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(p.delegate)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                                </template>
+                                                                <button
+                                                                    @click="copyAddress(p.delegate)"
+                                                                    class="btn-icon-small"
+                                                                    title="Copy Address"
+                                                                    style="opacity: 0.6;">
+                                                                    📋
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <span style="background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-weight: 600; color: var(--primary-color); font-size: 0.75rem;"
+                                                                  x-text="p.proxy_type || '—'"></span>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Incoming: accounts that added this address as proxy -->
+                            <div>
+                                <h3 style="margin-bottom: 0.75rem; font-size: 1rem;">
+                                    Accounts that added this as a proxy
+                                    <span class="subtitle" x-text="'(' + proxiesIncoming.length + ')'" style="font-weight: normal;"></span>
+                                </h3>
+                                <template x-if="proxiesIncoming.length === 0">
+                                    <div class="empty-state" style="padding: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+                                        Not used as a proxy by any account.
+                                    </div>
+                                </template>
+                                <template x-if="proxiesIncoming.length > 0">
+                                    <div class="traders-table-container">
+                                        <table class="traders-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Real Account</th>
+                                                    <th>Proxy Type</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(p, index) in proxiesIncoming" :key="'in-' + index">
+                                                    <tr>
+                                                        <td>
+                                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                                <code class="address-short clickable-address"
+                                                                      @click="openAddressModal(p.real_addr)"
+                                                                      x-text="formatAddress(p.real_addr)"
+                                                                      style="cursor: pointer;"></code>
+                                                                <template x-if="getAddressLabel(p.real_addr)">
+                                                                    <span class="trader-label-badge" x-text="getAddressLabel(p.real_addr)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                                </template>
+                                                                <button
+                                                                    @click="copyAddress(p.real_addr)"
+                                                                    class="btn-icon-small"
+                                                                    title="Copy Address"
+                                                                    style="opacity: 0.6;">
+                                                                    📋
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <span style="background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-weight: 600; color: var(--primary-color); font-size: 0.75rem;"
+                                                                  x-text="p.proxy_type || '—'"></span>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Stake Distribution Table -->
+            <template x-if="!loading && !error && stakes.length > 0">
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <h2>Stake Distribution</h2>
+                            <span class="subtitle" x-text="stakes.length + ' position' + (stakes.length !== 1 ? 's' : '')"></span>
+                        </div>
+                        <button @click="loadStakeInfo()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                    
+                    <div class="traders-table-container">
+                        <table class="traders-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;"></th>
+                                    <th>Subnet</th>
+                                    <th style="text-align: right;">Stake (τ)</th>
+                                    <th style="text-align: right;">Stake (α)</th>
+                                    <th style="text-align: right;">% of Total</th>
+                                    <th style="text-align: center;">Positions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(row, index) in groupedStakes" :key="'row-' + index">
+                                    <tr x-show="row.rowType === 'group' || isNetuidExpanded(row.netuid)"
+                                        :class="row.rowType === 'group' ? '' : 'hotkey-row'"
+                                        :style="row.rowType === 'group' ? 'cursor: pointer; background: var(--bg-tertiary);' : ''"
+                                        @click="row.rowType === 'group' ? toggleNetuid(row.netuid) : null">
+                                        
+                                        <!-- Group Row -->
+                                        <template x-if="row.rowType === 'group'">
+                                            <td style="text-align: center;">
+                                                <span x-text="isNetuidExpanded(row.netuid) ? '▼' : '▶'" 
+                                                      style="color: var(--primary-color); font-size: 0.75rem;"></span>
+                                            </td>
+                                        </template>
+                                        <template x-if="row.rowType === 'stake'">
+                                            <td></td>
+                                        </template>
+                                        
+                                        <!-- Second Column -->
+                                        <template x-if="row.rowType === 'group'">
+                                            <td>
+                                                <a :href="'/subnet/' + row.netuid" 
+                                                   @click.stop
+                                                   class="subnet-link"
+                                                   x-text="'SN ' + row.netuid"
+                                                   style="color: var(--primary-color); text-decoration: none; font-weight: 700; font-size: 1rem;">
+                                                </a>
+                                            </td>
+                                        </template>
+                                        <template x-if="row.rowType === 'stake'">
+                                            <td style="padding-left: 2rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <code class="address-short" x-text="formatAddress(row.stake.hotkey_ss58)"></code>
+                                                    <button 
+                                                        @click="copyAddress(row.stake.hotkey_ss58)" 
+                                                        class="btn-icon-small" 
+                                                        title="Copy Hotkey Address"
+                                                        style="opacity: 0.6;">
+                                                        📋
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </template>
+                                        
+                                        <!-- Third Column - Stake τ -->
+                                        <td style="text-align: right;">
+                                            <strong x-show="row.rowType === 'group'" style="color: var(--text-primary); font-size: 1rem;" x-text="row.totalStakeTao?.toFixed(2) + ' τ'"></strong>
+                                            <span x-show="row.rowType === 'stake'" style="color: var(--text-primary);" x-text="row.stake?.stake_tao.toFixed(2) + ' τ'"></span>
+                                        </td>
+                                        
+                                        <!-- Fourth Column - Stake α -->
+                                        <td style="text-align: right;">
+                                            <span x-show="row.rowType === 'group'" style="color: var(--text-secondary);" x-text="row.totalStakeAlpha?.toFixed(2) + ' α'"></span>
+                                            <span x-show="row.rowType === 'stake'" style="color: var(--text-secondary); font-size: 0.875rem;" x-text="row.stake?.stake_alpha.toFixed(2) + ' α'"></span>
+                                        </td>
+                                        
+                                        <!-- Fifth Column - % -->
+                                        <td style="text-align: right;">
+                                            <span x-show="row.rowType === 'group'" class="percentage-badge" style="font-weight: 700;" x-text="((row.totalStakeTao / totalStakedTao) * 100).toFixed(2) + '%'"></span>
+                                            <span x-show="row.rowType === 'stake'" style="font-size: 0.875rem; color: var(--text-secondary);" x-text="((row.stake?.stake_tao / row.groupTotalStakeTao) * 100).toFixed(2) + '%'"></span>
+                                        </td>
+                                        
+                                        <!-- Sixth Column - Actions -->
+                                        <td style="text-align: center;">
+                                            <span x-show="row.rowType === 'group'" style="background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-weight: 600; color: var(--primary-color);" x-text="row.stakesCount"></span>
+                                            <a x-show="row.rowType === 'stake'" :href="'/account/' + row.stake?.hotkey_ss58" 
+                                               class="btn-icon-small" 
+                                               title="View Hotkey Account"
+                                               style="text-decoration: none;">
+                                                👁️
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Empty State -->
+            <template x-if="!loading && !error && stakes.length === 0">
+                <div class="card">
+                    <div class="empty-state" style="text-align: center; padding: 3rem 1rem; color: var(--text-secondary);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
+                        <h3 style="margin-bottom: 0.5rem;">No Stake Positions Found</h3>
+                        <p>This address currently has no stake on any subnet.</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Trades Section -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <h2>Trades</h2>
+                        <span class="subtitle" x-text="tradesTotalCount + ' total trade' + (tradesTotalCount !== 1 ? 's' : '')"></span>
+                    </div>
+                    <button @click="loadTrades()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <template x-if="tradesLoading">
+                    <div style="text-align: center; padding: 2rem;">
+                        <div class="loading-spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--text-secondary);">Loading trades...</p>
+                    </div>
+                </template>
+
+                <template x-if="!tradesLoading && tradesError">
+                    <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                        <span x-text="tradesError"></span>
+                    </div>
+                </template>
+
+                <template x-if="!tradesLoading && !tradesError && trades && trades.length > 0">
+                    <div>
+                        <div class="traders-table-container">
+                            <table class="traders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Subnet</th>
+                                        <th style="text-align: right;">Amount (τ)</th>
+                                        <th style="text-align: right;">Amount (α)</th>
+                                        <th style="text-align: right;">Price</th>
+                                        <th style="text-align: center;">Block</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(trade, index) in trades" :key="'trade-' + index">
+                                        <tr>
+                                            <td x-text="formatDate(trade.timestamp)" style="font-size: 0.75rem; color: var(--text-secondary);"></td>
+                                            <td>
+                                                <span :class="trade.is_sell ? 'negative' : 'positive'" 
+                                                      x-text="trade.is_sell ? 'Sell' : 'Buy'"
+                                                      style="font-weight: 600;"></span>
+                                            </td>
+                                            <td>
+                                                <a :href="'/subnet/' + trade.netuid" 
+                                                   class="subnet-link"
+                                                   x-text="'SN ' + trade.netuid"
+                                                   style="color: var(--primary-color); text-decoration: none; font-weight: 600;">
+                                                </a>
+                                            </td>
+                                            <td style="text-align: right;" x-text="trade.tao.toFixed(2) + ' τ'"></td>
+                                            <td style="text-align: right;" x-text="trade.alpha.toFixed(2) + ' α'" style="color: var(--text-secondary);"></td>
+                                            <td style="text-align: right;" x-text="trade.price.toFixed(6) + ' τ/α'"></td>
+                                            <td style="text-align: center;">
+                                                <a :href="`https://taostats.io/block/${trade.block_number}`"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   x-text="trade.block_number"
+                                                   style="color: var(--primary-color); text-decoration: none; font-size: 0.75rem;"></a>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="pagination" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <button @click="prevTradesPage()" 
+                                        :disabled="tradesPage === 1"
+                                        class="btn-secondary"
+                                        style="opacity: 1;">
+                                    ← Previous
+                                </button>
+                                <button @click="nextTradesPage()" 
+                                        :disabled="tradesPage >= tradesTotalPages"
+                                        class="btn-secondary"
+                                        style="opacity: 1;">
+                                    Next →
+                                </button>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary);">
+                                <span>Page</span>
+                                <input 
+                                    type="number" 
+                                    x-model="tradesPageInput" 
+                                    @keydown.enter="goToTradesPage()"
+                                    @blur="goToTradesPage()"
+                                    min="1" 
+                                    :max="tradesTotalPages"
+                                    style="width: 60px; padding: 0.25rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary); text-align: center;">
+                                <span>of <strong x-text="tradesTotalPages"></strong></span>
+                                <span style="margin-left: 0.5rem;">(<span x-text="tradesTotalCount"></span> total)</span>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <label style="color: var(--text-secondary); font-size: 0.875rem;">Per page:</label>
+                                <select 
+                                    x-model="tradesPageSize" 
+                                    @change="changeTradesPageSize()"
+                                    style="padding: 0.25rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary);">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!tradesLoading && !tradesError && (!trades || trades.length === 0)">
+                    <div class="empty-state" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary);">
+                        <p>No trades found for this address.</p>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Transfers Section -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <h2>Transfers</h2>
+                        <span class="subtitle" x-text="transfersTotalCount + ' total transfer' + (transfersTotalCount !== 1 ? 's' : '')"></span>
+                    </div>
+                    <button @click="loadTransfers()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <template x-if="transfersLoading">
+                    <div style="text-align: center; padding: 2rem;">
+                        <div class="loading-spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--text-secondary);">Loading transfers...</p>
+                    </div>
+                </template>
+
+                <template x-if="!transfersLoading && transfersError">
+                    <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                        <span x-text="transfersError"></span>
+                    </div>
+                </template>
+
+                <template x-if="!transfersLoading && !transfersError && transfers && transfers.length > 0">
+                    <div>
+                        <div class="traders-table-container">
+                            <table class="traders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th>Netuid</th>
+                                        <th style="text-align: right;">Amount (τ)</th>
+                                        <th style="text-align: center;">Block</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(transfer, index) in transfers" :key="'transfer-' + index">
+                                        <tr>
+                                            <td x-text="formatDate(transfer.timestamp)" style="font-size: 0.75rem; color: var(--text-secondary);"></td>
+                                            <td>
+                                                <span :class="transfer.direction === 'sent' ? 'negative' : 'positive'" 
+                                                      x-text="transfer.direction === 'sent' ? '↑ Sent' : '↓ Received'"
+                                                      style="font-weight: 600;"></span>
+                                            </td>
+                                            <td>
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <code class="address-short clickable-address" 
+                                                          @click="openAddressModal(transfer.from_address)"
+                                                          x-text="formatAddress(transfer.from_address)"
+                                                          style="cursor: pointer;"></code>
+                                                    <template x-if="getAddressLabel(transfer.from_address)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(transfer.from_address)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <code class="address-short clickable-address" 
+                                                          @click="openAddressModal(transfer.to_address)"
+                                                          x-text="formatAddress(transfer.to_address)"
+                                                          style="cursor: pointer;"></code>
+                                                    <template x-if="getAddressLabel(transfer.to_address)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(transfer.to_address)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span x-text="transfer.netuid === -1 ? 'TAO' : 'SN ' + transfer.netuid" 
+                                                      style="font-size: 0.75rem; color: var(--text-secondary);"></span>
+                                            </td>
+                                            <td style="text-align: right;">
+                                                <strong x-text="transfer.tao_amount.toFixed(2) + ' τ'"></strong>
+                                            </td>
+                                            <td style="text-align: center;">
+                                                <a :href="`https://taostats.io/block/${transfer.block_number}`"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   x-text="transfer.block_number"
+                                                   style="color: var(--primary-color); text-decoration: none; font-size: 0.75rem;"></a>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="pagination" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <button @click="prevTransfersPage()" 
+                                        :disabled="transfersPage === 1"
+                                        class="btn-secondary"
+                                        style="opacity: 1;">
+                                    ← Previous
+                                </button>
+                                <button @click="nextTransfersPage()" 
+                                        :disabled="transfersPage >= transfersTotalPages"
+                                        class="btn-secondary"
+                                        style="opacity: 1;">
+                                    Next →
+                                </button>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary);">
+                                <span>Page</span>
+                                <input 
+                                    type="number" 
+                                    x-model="transfersPageInput" 
+                                    @keydown.enter="goToTransfersPage()"
+                                    @blur="goToTransfersPage()"
+                                    min="1" 
+                                    :max="transfersTotalPages"
+                                    style="width: 60px; padding: 0.25rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary); text-align: center;">
+                                <span>of <strong x-text="transfersTotalPages"></strong></span>
+                                <span style="margin-left: 0.5rem;">(<span x-text="transfersTotalCount"></span> total)</span>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <label style="color: var(--text-secondary); font-size: 0.875rem;">Per page:</label>
+                                <select 
+                                    x-model="transfersPageSize" 
+                                    @change="changeTransfersPageSize()"
+                                    style="padding: 0.25rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary);">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!transfersLoading && !transfersError && (!transfers || transfers.length === 0)">
+                    <div class="empty-state" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary);">
+                        <p>No transfer activity found for this address.</p>
+                    </div>
+                </template>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Address Details Modal -->
+        <div x-show="addressModalOpen" 
+         @click.self="closeAddressModal()" 
+         class="address-modal-overlay">
+        <div class="address-modal" @click.away="closeAddressModal()">
+            <div class="address-modal-header">
+                <h3>Address Details</h3>
+                <button @click="closeAddressModal()" class="address-modal-close">&times;</button>
+            </div>
+            <div class="address-modal-body">
+                <!-- Full Address -->
+                <div class="address-modal-section">
+                    <div class="address-modal-label-text">Address</div>
+                    <div class="address-modal-address">
+                        <span x-text="selectedAddress"></span>
+                        <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                    </div>
+                </div>
+
+                <!-- Label Management -->
+                <div class="address-modal-section">
+                    <div class="address-modal-label-text">Label</div>
+                    <div x-show="!editingLabel">
+                        <div class="address-modal-label-display">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                    <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                </template>
+                                <template x-if="modalLabelCache">
+                                    <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                </template>
+                                <template x-if="!modalLabelCache">
+                                    <span class="address-modal-no-label">No label set</span>
+                                </template>
+                                <template x-if="modalTypeCache">
+                                    <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                </template>
+                            </div>
+                            <div style="margin-left: auto;" class="address-modal-label-actions">
+                                <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                    <span x-show="!modalLabelCache">➕ Add</span>
+                                    <span x-show="modalLabelCache">✏️ Edit</span>
+                                </button>
+                                <template x-if="modalLabelCache">
+                                    <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div x-show="editingLabel">
+                        <div class="address-modal-label-form">
+                            <input 
+                                type="text" 
+                                x-model="labelInput"
+                                @keydown.enter="saveLabelFromModal()"
+                                @keydown.escape="cancelEditingLabel()"
+                                class="address-modal-label-input"
+                                placeholder="Enter label..."
+                                x-ref="labelInput"
+                            >
+                            <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                <option value="">No type</option>
+                                <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                    <option :value="typeName" x-text="typeName"></option>
+                                </template>
+                            </select>
+                            <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                            <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="address-modal-actions">
+                    <a :href="`/account/${selectedAddress}`"
+                       class="address-modal-btn address-modal-btn-primary"
+                       target="_blank">
+                       💼 Account Page
+                    </a>
+                    <a :href="`/strategy/${selectedAddress}`"
+                       class="address-modal-btn address-modal-btn-secondary"
+                       target="_blank">
+                        🧠 Strategy
+                    </a>
+                    <a :href="`/connections/${selectedAddress}`"
+                       class="address-modal-btn address-modal-btn-secondary"
+                       target="_blank">
+                        🔗 Connections
+                    </a>
+                    <a :href="`https://taostats.io/account/${selectedAddress}`" 
+                       class="address-modal-btn address-modal-btn-secondary"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        🌐 Taostats
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

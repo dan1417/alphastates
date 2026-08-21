@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+</head>
+<body>
+    <div class="container" x-data="app()">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>AlphaStats</h1>
+                    <p class="subtitle">Advanced analytics for dTao Alpha trading</p>
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <span x-show="userEmail" style="color: var(--text-secondary); font-size: 0.9rem;" x-text="userEmail"></span>
+                    <button onclick="logout()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="card">
+                <h2>🌐 All Subnets</h2>
+                <p>Browse every subnet with live price, liquidity, emission and risk status in one sortable table:</p>
+                <a href="/subnets" class="btn-primary" style="display: inline-block; text-decoration: none;">🌐 View All Subnets</a>
+            </div>
+
+            <div class="card">
+                <h2>View Subnet Analytics</h2>
+                <p>Enter a subnet ID to view OHLC price charts:</p>
+                
+                <form @submit.prevent="goToSubnet" class="subnet-form">
+                    <input 
+                        type="number" 
+                        x-model="netuid" 
+                        placeholder="Enter netuid (e.g., 1)" 
+                        min="0"
+                        required
+                        class="input-field"
+                    >
+                    <button type="submit" class="btn-primary">View Analytics</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Transfer Connections</h2>
+                <p>Visualize wallet address transfer relationships with an interactive network graph:</p>
+                
+                <form @submit.prevent="goToConnections" class="subnet-form">
+                    <input 
+                        type="text" 
+                        x-model="connectionAddress" 
+                        placeholder="Enter address (e.g., 5GmaV...)" 
+                        minlength="47"
+                        maxlength="48"
+                        class="input-field"
+                    >
+                    <button type="submit" class="btn-primary">View Connections</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Address Management</h2>
+                <p>Label and organize blockchain addresses for easy tracking and identification:</p>
+                <a href="/addresses" class="btn-primary" style="display: inline-block; text-decoration: none;">🏷️ Manage Addresses</a>
+            </div>
+
+            <div class="card">
+                <h2>📊 Events Dashboard</h2>
+                <p>Monitor real-time and historical blockchain events with live WebSocket updates:</p>
+                <a href="/events" class="btn-primary" style="display: inline-block; text-decoration: none;">📡 View Events</a>
+            </div>
+
+            <div class="card">
+                <h2>💾 Saved Connection Graphs</h2>
+                <p>Access your saved connection graphs from previous sessions:</p>
+                
+                <div x-show="savedGraphs.length === 0" style="padding: 2rem; text-align: center; color: var(--text-secondary); font-size: 0.875rem;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                    <p>No saved graphs yet</p>
+                    <p style="font-size: 0.75rem; margin-top: 0.5rem;">Create a connection graph and save it for later!</p>
+                </div>
+
+                <div x-show="savedGraphs.length > 0" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 400px; overflow-y: auto;">
+                    <template x-for="graph in savedGraphs" :key="graph.id">
+                        <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; background: var(--bg-secondary);">
+                            
+                            <!-- Header with name -->
+                            <h5 style="font-size: 1rem; font-weight: 700; margin: 0 0 0.5rem 0; color: var(--text-primary);" x-text="graph.name"></h5>
+                            
+                            <!-- Timestamp -->
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.75rem;" x-text="formatGraphTimestamp(graph.timestamp)"></div>
+                            
+                            <!-- Stats Grid -->
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.05); border-radius: 0.375rem;">
+                                <div style="font-size: 0.8rem;">
+                                    <span style="color: var(--text-secondary); font-weight: 500;">Nodes:</span> 
+                                    <strong x-text="graph.nodeCount" style="color: var(--text-primary);"></strong>
+                                </div>
+                                <div style="font-size: 0.8rem;">
+                                    <span style="color: var(--text-secondary); font-weight: 500;">Edges:</span> 
+                                    <strong x-text="graph.edgeCount" style="color: var(--text-primary);"></strong>
+                                </div>
+                            </div>
+
+                            <!-- Root Address -->
+                            <div style="font-size: 0.75rem; margin-bottom: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.05); border-radius: 0.375rem;">
+                                <div style="color: var(--text-secondary); font-weight: 500; margin-bottom: 0.25rem;">Root Address:</div>
+                                <div style="font-family: monospace; color: var(--text-primary); word-break: break-all;" x-text="graph.rootAddress"></div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem;">
+                                <button 
+                                    @click="loadGraphFromHome(graph.id)" 
+                                    class="btn-small btn-primary"
+                                    style="width: 100%;">
+                                    📂 Load
+                                </button>
+                                <button 
+                                    @click="exportGraph(graph.id)" 
+                                    class="btn-small btn-secondary"
+                                    title="Export as JSON">
+                                    💾
+                                </button>
+                                <button 
+                                    @click="deleteSavedGraph(graph.id, graph.name)" 
+                                    class="btn-small btn-danger">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        function app() {
+            return {
+                netuid: 1,
+                connectionAddress: '',
+                savedGraphs: [],
+                userEmail: '',
+
+                async init() {
+                    // Load current user info
+                    await this.loadUserInfo();
+                    // Load saved graphs on page load
+                    this.loadSavedGraphsList();
+                },
+
+                async loadUserInfo() {
+                    try {
+                        const response = await authFetch('/api/v1/auth/me');
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.userEmail = data.email;
+                        }
+                    } catch (error) {
+                        console.error('Error loading user info:', error);
+                    }
+                },
+
+                goToSubnet() {
+                    if (this.netuid !== null && this.netuid >= 0) {
+                        window.location.href = `/subnet/${this.netuid}`;
+                    }
+                },
+
+                goToConnections() {
+                    if (this.connectionAddress && this.connectionAddress.length >= 47) {
+                        window.location.href = `/connections/${this.connectionAddress}`;
+                    } else {
+                        alert('Please enter a valid SS58 address (47-48 characters)');
+                    }
+                },
+
+                /**
+                 * Load list of saved graphs from localStorage
+                 */
+                loadSavedGraphsList() {
+                    try {
+                        const saved = localStorage.getItem('savedConnectionGraphs');
+                        if (saved) {
+                            const graphs = JSON.parse(saved);
+                            this.savedGraphs = Object.keys(graphs).map(key => ({
+                                id: key,
+                                name: graphs[key].name,
+                                timestamp: graphs[key].timestamp,
+                                nodeCount: graphs[key].nodeCount,
+                                edgeCount: graphs[key].edgeCount,
+                                rootAddress: graphs[key].rootAddress
+                            })).sort((a, b) => b.timestamp - a.timestamp);
+                        } else {
+                            this.savedGraphs = [];
+                        }
+                    } catch (error) {
+                        console.error('Error loading saved graphs list:', error);
+                        this.savedGraphs = [];
+                    }
+                },
+
+                /**
+                 * Load a saved graph from home page
+                 */
+                loadGraphFromHome(graphId) {
+                    try {
+                        const saved = localStorage.getItem('savedConnectionGraphs');
+                        if (!saved) {
+                            alert('No saved graphs found');
+                            return;
+                        }
+
+                        const graphs = JSON.parse(saved);
+                        const graphState = graphs[graphId];
+
+                        if (!graphState) {
+                            alert('Graph not found');
+                            return;
+                        }
+
+                        // Store the graph ID to load in sessionStorage
+                        sessionStorage.setItem('loadGraphId', graphId);
+
+                        // Navigate to connections page with the root address
+                        window.location.href = `/connections/${graphState.rootAddress}`;
+                    } catch (error) {
+                        console.error('Error loading graph:', error);
+                        alert('Failed to load graph. The data might be corrupted.');
+                    }
+                },
+
+                /**
+                 * Delete a saved graph
+                 */
+                deleteSavedGraph(graphId, graphName) {
+                    if (!confirm(`Delete graph "${graphName}"?\n\nThis action cannot be undone.`)) {
+                        return;
+                    }
+
+                    try {
+                        const saved = localStorage.getItem('savedConnectionGraphs');
+                        if (!saved) {
+                            return;
+                        }
+
+                        const graphs = JSON.parse(saved);
+                        delete graphs[graphId];
+
+                        localStorage.setItem('savedConnectionGraphs', JSON.stringify(graphs));
+                        this.loadSavedGraphsList();
+                        alert(`Graph "${graphName}" deleted successfully!`);
+                    } catch (error) {
+                        console.error('Error deleting graph:', error);
+                        alert('Failed to delete graph');
+                    }
+                },
+
+                /**
+                 * Export graph as JSON file
+                 */
+                exportGraph(graphId) {
+                    try {
+                        const saved = localStorage.getItem('savedConnectionGraphs');
+                        if (!saved) {
+                            alert('No saved graphs found');
+                            return;
+                        }
+
+                        const graphs = JSON.parse(saved);
+                        const graphState = graphs[graphId];
+
+                        if (!graphState) {
+                            alert('Graph not found');
+                            return;
+                        }
+
+                        // Create JSON file
+                        const jsonStr = JSON.stringify(graphState, null, 2);
+                        const blob = new Blob([jsonStr], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+
+                        // Create download link
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${graphState.name.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (error) {
+                        console.error('Error exporting graph:', error);
+                        alert('Failed to export graph');
+                    }
+                },
+
+                /**
+                 * Format timestamp for display
+                 */
+                formatGraphTimestamp(timestamp) {
+                    const date = new Date(timestamp);
+                    return date.toLocaleString();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

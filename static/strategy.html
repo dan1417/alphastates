@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategy Analysis | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+    <script src="/static/js/strategy.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div class="container" x-data="strategyApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>🧠 Strategy Analysis</h1>
+                    <div class="address-display" style="margin-top: 0.5rem;">
+                        <code class="address-code clickable-address"
+                              @click="openAddressModal(proxyAddress)"
+                              x-text="proxyAddress"
+                              style="cursor: pointer;"></code>
+                        <template x-if="getAddressLabel(proxyAddress)">
+                            <span class="trader-label-badge" x-text="getAddressLabel(proxyAddress)" style="margin-left: 0.5rem;"></span>
+                        </template>
+                        <button @click="copyAddress(proxyAddress)" class="btn-icon" title="Copy Address">📋</button>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 1rem;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a :href="`/account/${proxyAddress}`" class="back-link">💼 Account Page</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Loading State -->
+            <template x-if="loading">
+                <div class="card">
+                    <div style="text-align: center; padding: 2rem;">
+                        <div class="loading-spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--text-secondary);">Loading delegators...</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Error State -->
+            <template x-if="error">
+                <div class="card">
+                    <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                        <strong>Error:</strong> <span x-text="error"></span>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Summary -->
+            <template x-if="!loading && !error">
+                <div class="card">
+                    <h2>Summary</h2>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Delegators</div>
+                            <div class="stat-value" x-text="delegators.length"></div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Delegators Table -->
+            <template x-if="!loading && !error">
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <h2>Delegators</h2>
+                            <span class="subtitle" x-text="delegators.length + ' account' + (delegators.length !== 1 ? 's' : '')"></span>
+                        </div>
+                        <button @click="loadDelegators()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+
+                    <template x-if="delegators.length === 0">
+                        <div class="empty-state" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary);">
+                            <p>No accounts have added this address as a proxy.</p>
+                        </div>
+                    </template>
+
+                    <template x-if="delegators.length > 0">
+                        <div class="traders-table-container">
+                            <table class="traders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Delegator</th>
+                                        <th>Proxy Type</th>
+                                        <th style="text-align: center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(d, index) in delegators" :key="'del-' + index">
+                                        <tr>
+                                            <td>
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <code class="address-short clickable-address"
+                                                          @click="openAddressModal(d.real_addr)"
+                                                          x-text="formatAddress(d.real_addr)"
+                                                          style="cursor: pointer;"></code>
+                                                    <template x-if="getAddressLabel(d.real_addr)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(d.real_addr)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                    </template>
+                                                    <button
+                                                        @click="copyAddress(d.real_addr)"
+                                                        class="btn-icon-small"
+                                                        title="Copy Address"
+                                                        style="opacity: 0.6;">
+                                                        📋
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span style="background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-weight: 600; color: var(--primary-color); font-size: 0.75rem;"
+                                                      x-text="d.proxy_type || '—'"></span>
+                                            </td>
+                                            <td style="text-align: center;">
+                                                <a :href="`/account/${d.real_addr}`"
+                                                   class="btn-icon-small"
+                                                   title="View Account"
+                                                   style="text-decoration: none;">
+                                                    👁️
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Stake Distribution Across Delegators -->
+            <template x-if="!loading && !error && delegators.length > 0">
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <h2>Stake Distribution</h2>
+                            <span class="subtitle"
+                                  x-text="displayMode === 'percent' ? '% of row total per subnet' : 'τ amount per subnet'"></span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div role="group" aria-label="Display mode" style="display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius-sm); overflow: hidden;">
+                                <button
+                                    type="button"
+                                    @click="setDisplayMode('percent')"
+                                    :style="displayMode === 'percent'
+                                        ? 'background: var(--primary-color); color: white; padding: 0.4rem 0.75rem; border: none; cursor: pointer;'
+                                        : 'background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.4rem 0.75rem; border: none; cursor: pointer;'">
+                                    %
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="setDisplayMode('tao')"
+                                    :style="displayMode === 'tao'
+                                        ? 'background: var(--primary-color); color: white; padding: 0.4rem 0.75rem; border: none; cursor: pointer;'
+                                        : 'background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.4rem 0.75rem; border: none; cursor: pointer;'">
+                                    τ
+                                </button>
+                            </div>
+                            <button @click="loadStakeSummary()" class="btn-secondary" style="padding: 0.5rem 1rem;">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <template x-if="stakeLoading">
+                        <div style="text-align: center; padding: 2rem;">
+                            <div class="loading-spinner"></div>
+                            <p style="margin-top: 1rem; color: var(--text-secondary);">
+                                Fetching stake info for <span x-text="delegators.length"></span> delegators…
+                            </p>
+                        </div>
+                    </template>
+
+                    <template x-if="!stakeLoading && stakeError">
+                        <div class="error-message" style="padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-color); border-radius: var(--radius-md); color: var(--error-color);">
+                            <span x-text="stakeError"></span>
+                        </div>
+                    </template>
+
+                    <template x-if="!stakeLoading && !stakeError && sortedNetuids.length === 0">
+                        <div class="empty-state" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary);">
+                            <p>No stake found across delegators.</p>
+                        </div>
+                    </template>
+
+                    <template x-if="!stakeLoading && !stakeError && sortedNetuids.length > 0">
+                        <div class="traders-table-container" style="overflow-x: auto;">
+                            <table class="traders-table">
+                                <thead>
+                                    <tr>
+                                        <th style="position: sticky; left: 0; background: var(--bg-secondary); z-index: 2;">Delegator</th>
+                                        <th style="text-align: right; cursor: pointer; user-select: none;"
+                                            @click="sortBy('total')"
+                                            title="Sort by total τ">
+                                            <span>Total τ</span><span x-text="sortIndicator('total')"></span>
+                                        </th>
+                                        <template x-for="netuid in sortedNetuids" :key="'col-' + netuid">
+                                            <th style="text-align: right; cursor: pointer; user-select: none;"
+                                                @click="sortBy(netuid)"
+                                                :title="'Sort by SN ' + netuid">
+                                                <a :href="'/subnet/' + netuid"
+                                                   @click.stop
+                                                   class="subnet-link"
+                                                   style="color: var(--primary-color); text-decoration: none;"
+                                                   x-text="'SN ' + netuid"></a><span x-text="sortIndicator(netuid)"></span>
+                                            </th>
+                                        </template>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Totals row (always pinned at top, independent of sort) -->
+                                    <tr style="background: var(--bg-tertiary); font-weight: 700;">
+                                        <td style="position: sticky; left: 0; background: var(--bg-tertiary); z-index: 1;">All Delegators</td>
+                                        <td style="text-align: right;" x-text="formatTao(grandTotalTao) + ' τ'"></td>
+                                        <template x-for="netuid in sortedNetuids" :key="'tot-' + netuid">
+                                            <td style="text-align: right;" x-text="totalsCellDisplay(netuid)"></td>
+                                        </template>
+                                    </tr>
+                                    <!-- Per-delegator rows -->
+                                    <template x-for="(row, rowIdx) in sortedStakeRows" :key="'sr-' + row.address">
+                                        <tr>
+                                            <td style="position: sticky; left: 0; background: var(--bg-secondary); z-index: 1;">
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <code class="address-short clickable-address"
+                                                          @click="openAddressModal(row.address)"
+                                                          x-text="formatAddress(row.address)"
+                                                          style="cursor: pointer;"></code>
+                                                    <template x-if="getAddressLabel(row.address)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(row.address)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                            <td style="text-align: right;" x-text="formatTao(row.total_tao) + ' τ'"></td>
+                                            <template x-for="netuid in sortedNetuids" :key="'cell-' + row.address + '-' + netuid">
+                                                <td style="text-align: right;" x-text="cellDisplay(row, netuid)"></td>
+                                            </template>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Address Details Modal -->
+        <div x-show="addressModalOpen"
+             @click.self="closeAddressModal()"
+             class="address-modal-overlay">
+            <div class="address-modal" @click.away="closeAddressModal()">
+                <div class="address-modal-header">
+                    <h3>Address Details</h3>
+                    <button @click="closeAddressModal()" class="address-modal-close">&times;</button>
+                </div>
+                <div class="address-modal-body">
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Address</div>
+                        <div class="address-modal-address">
+                            <span x-text="selectedAddress"></span>
+                            <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                        </div>
+                    </div>
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Label</div>
+                        <div x-show="!editingLabel">
+                            <div class="address-modal-label-display">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                        <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                    </template>
+                                    <template x-if="modalLabelCache">
+                                        <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                    </template>
+                                    <template x-if="!modalLabelCache">
+                                        <span class="address-modal-no-label">No label set</span>
+                                    </template>
+                                    <template x-if="modalTypeCache">
+                                        <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                    </template>
+                                </div>
+                                <div style="margin-left: auto;" class="address-modal-label-actions">
+                                    <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                        <span x-show="!modalLabelCache">➕ Add</span>
+                                        <span x-show="modalLabelCache">✏️ Edit</span>
+                                    </button>
+                                    <template x-if="modalLabelCache">
+                                        <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div x-show="editingLabel">
+                            <div class="address-modal-label-form">
+                                <input
+                                    type="text"
+                                    x-model="labelInput"
+                                    @keydown.enter="saveLabelFromModal()"
+                                    @keydown.escape="cancelEditingLabel()"
+                                    class="address-modal-label-input"
+                                    placeholder="Enter label..."
+                                    x-ref="labelInput"
+                                >
+                                <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                    <option value="">No type</option>
+                                    <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                        <option :value="typeName" x-text="typeName"></option>
+                                    </template>
+                                </select>
+                                <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                                <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="address-modal-actions">
+                        <a :href="`/account/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-primary"
+                           target="_blank">
+                            💼 Account Page
+                        </a>
+                        <a :href="`/strategy/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🧠 Strategy
+                        </a>
+                        <a :href="`/connections/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🔗 Connections
+                        </a>
+                        <a :href="`https://taostats.io/account/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            🌐 Taostats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

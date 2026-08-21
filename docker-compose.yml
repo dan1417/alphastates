@@ -1,0 +1,241 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bt-analphysis-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-indexer} -d ${POSTGRES_DB:-bittensor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bt-analphysis-redis
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ohlc-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.ohlc-indexer
+    container_name: bt-analphysis-ohlc-indexer
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+      DTAO_START_BLOCK: ${DTAO_START_BLOCK:-4920351}
+      BATCH_SIZE: ${BATCH_SIZE:-10000}
+      MAX_WORKERS: ${MAX_WORKERS:-50}
+      RESET_DB: ${RESET_DB:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  transfer-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.transfer-indexer
+    container_name: bt-analphysis-transfer-indexer
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+      DTAO_START_BLOCK: ${DTAO_START_BLOCK:-4920351}
+      BATCH_SIZE: ${BATCH_SIZE:-10000}
+      MAX_WORKERS: ${MAX_WORKERS:-50}
+      RESET_DB: ${RESET_DB:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  holder-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.holder-indexer
+    container_name: bt-analphysis-holder-indexer
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - holder  # Only start with --profile holder
+
+  proxy-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy-indexer
+    container_name: bt-analphysis-proxy-indexer
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+      BATCH_SIZE: ${BATCH_SIZE:-10000}
+      MAX_WORKERS: ${MAX_WORKERS:-50}
+      RESET_DB: ${RESET_DB:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - proxy  # Only start with --profile proxy
+
+  event-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.event-monitor
+    container_name: bt-analphysis-event-monitor
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  subnets-cacher:
+    build:
+      context: .
+      dockerfile: Dockerfile.subnets-cacher
+    container_name: bt-analphysis-subnets-cacher
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOCAL_RPC_URL: ${CACHER_LOCAL_RPC_URL:-ws://67.213.113.23:9944}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  failed-extrinsic-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.failed-extrinsic-monitor
+    container_name: bt-analphysis-failed-extrinsic-monitor
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      RPC_URL: ${RPC_URL:-ws://185.189.45.20:9944}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mempool-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.mempool-watcher
+    container_name: bt-analphysis-mempool-watcher
+    environment:
+      RPC_URL: ${RPC_URL:-http://185.189.45.20:9944}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MEMPOOL_POLL_INTERVAL: ${MEMPOOL_POLL_INTERVAL:-1.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: bt-analphysis-api
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-indexer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexer}
+      POSTGRES_DB: ${POSTGRES_DB:-bittensor}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGE-THIS-TO-A-SECURE-RANDOM-KEY-IN-PRODUCTION}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      ANONYMOUS_DEFAULT_PASSWORD: ${ANONYMOUS_DEFAULT_PASSWORD:-anonymous_default_password_2024}
+      LOCAL_RPC_URL: ${LOCAL_RPC_URL:-ws://host.docker.internal:9944}
+      SUBTENSOR_POOL_SIZE: ${SUBTENSOR_POOL_SIZE:-50}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

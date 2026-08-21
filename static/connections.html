@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connections | AlphaStats</title>
+    <link rel="icon" type="image/png" href="/static/img/logo.png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/auth.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <script src="/static/js/addressLabels.js"></script>
+    <script src="/static/js/addressModalHelpers.js"></script>
+    <style>
+        #network-container {
+            width: 100%;
+            height: 1000px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: var(--radius-md, 8px);
+            background: var(--bg-primary, #ffffff);
+        }
+        
+        .node-popup {
+            position: absolute;
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            min-width: 250px;
+        }
+        
+        .node-popup-header {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .node-popup-label {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: var(--primary-color);
+            color: white;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .node-popup-address {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            word-break: break-all;
+        }
+        
+        .node-popup-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .node-popup-btn {
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            text-align: center;
+        }
+        
+        .node-popup-btn.label {
+            background: var(--warning-color);
+            color: white;
+        }
+        
+        .node-popup-btn.label:hover {
+            background: #d97706;
+        }
+
+        .node-popup-btn.expand {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .node-popup-btn.expand:hover {
+            background: var(--primary-hover);
+        }
+        
+        .node-popup-btn.navigate {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        .node-popup-btn.navigate:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .node-popup-btn.remove {
+            background: var(--error-color);
+            color: white;
+        }
+        
+        .node-popup-btn.remove:hover {
+            background: #dc2626;
+        }
+        
+        .node-popup-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .search-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+        
+        .search-form .form-group {
+            flex: 1;
+        }
+        
+        .search-form label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary, #475569);
+        }
+        
+        .connection-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .stat-box {
+            padding: 1rem;
+            background: var(--bg-secondary, #f8fafc);
+            border-radius: var(--radius-md, 8px);
+            border: 1px solid var(--border-color, #e2e8f0);
+        }
+        
+        .stat-box .label {
+            font-size: 0.875rem;
+            color: var(--text-secondary, #475569);
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-box .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary, #0f172a);
+        }
+        
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary, #f8fafc);
+            border-radius: var(--radius-md, 8px);
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .legend-node {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid;
+        }
+        
+        .legend-node.query {
+            background: #3b82f6;
+            border-color: #2563eb;
+        }
+        
+        .legend-node.receiver {
+            background: #6366f1;
+            border-color: #4f46e5;
+        }
+        
+        .legend-node.expanded {
+            background: #94a3b8;
+            border-color: #64748b;
+        }
+        
+        .transfers-table {
+            margin-top: 1.5rem;
+            overflow-x: auto;
+        }
+        
+        .transfers-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        .transfers-table th,
+        .transfers-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color, #e2e8f0);
+        }
+        
+        .transfers-table th {
+            font-weight: 600;
+            color: var(--text-secondary, #475569);
+            background: var(--bg-secondary, #f8fafc);
+        }
+        
+        .transfers-table td {
+            color: var(--text-primary, #0f172a);
+        }
+        
+        .address-cell {
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        
+        .direction-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .direction-badge.sent {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .direction-badge.received {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary, #475569);
+        }
+        
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .spinner {
+            border: 3px solid var(--bg-secondary, #f3f4f6);
+            border-top: 3px solid var(--primary-color, #2563eb);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" x-data="transfersApp()">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>Connections</h1>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <a href="/home" class="back-link">← Back to Home</a>
+                        <a href="/addresses" class="back-link">🏷️ Manage Addresses</a>
+                    </div>
+                </div>
+                <div class="header-controls">
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <button 
+                            @click="openSaveLoadModal()" 
+                            class="btn-secondary"
+                            style="padding: 0.5rem 1rem; white-space: nowrap;"
+                            title="Save or load connection graphs"
+                        >
+                            💾 Graphs
+                        </button>
+                        <input 
+                            type="text" 
+                            x-model="addressInput" 
+                            @keydown.enter="goToAddress()"
+                            placeholder="Enter address"
+                            style="width: 300px; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);"
+                            class="select-field"
+                        >
+                        <button 
+                            @click="goToAddress()" 
+                            class="btn-primary"
+                            style="padding: 0.5rem 1rem; white-space: nowrap;"
+                        >
+                            Go to Address
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Network Graph -->
+            <div x-show="hasData && !loading" class="card">
+                <div class="card-header">
+                    <h2>Connection Graph</h2>
+                    <div class="update-info">
+                        <span>Showing transfer relationships for <strong x-text="currentAddress ? currentAddress.substring(0, 8) + '...' + currentAddress.substring(currentAddress.length - 6) : ''"></strong></span>
+                    </div>
+                </div>
+                
+                <!-- Graph Search -->
+                <div style="margin-bottom: 1rem;">
+                    <form @submit.prevent="searchInGraph()" style="display: flex; gap: 0.5rem; align-items: center;">
+                        <div style="flex: 3; min-width: 500px;">
+                            <input 
+                                type="text" 
+                                x-model="graphSearchQuery"
+                                placeholder="Search for an address in the graph..." 
+                                class="input-field"
+                                style="margin-bottom: 0; width: 100%;"
+                            >
+                        </div>
+                        <button type="submit" class="btn-primary" style="white-space: nowrap;">
+                            🔍 Find in Graph
+                        </button>
+                        <button 
+                            type="button" 
+                            @click="clearGraphSearch()"
+                            class="btn-secondary" 
+                            x-show="graphSearchQuery"
+                            style="white-space: nowrap;">
+                            ✕ Clear
+                        </button>
+                    </form>
+                    <div x-show="graphSearchResult" 
+                         x-transition
+                         style="margin-top: 0.5rem; padding: 0.5rem; border-radius: 0.375rem;"
+                         :style="`background-color: ${graphSearchResult?.found ? '#dcfce7' : '#fee2e2'}; color: ${graphSearchResult?.found ? '#166534' : '#991b1b'};`">
+                        <span x-text="graphSearchResult?.message"></span>
+                    </div>
+                </div>
+
+                <!-- Add Address to Graph -->
+                <div style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #e2e8f0);">
+                    <form @submit.prevent="expandAddress()" style="display: flex; gap: 0.5rem; align-items: center;">
+                        <div style="flex: 3; min-width: 500px;">
+                            <input 
+                                type="text" 
+                                x-model="expandAddressQuery"
+                                placeholder="Enter an address to add to the graph..." 
+                                class="input-field"
+                                style="margin-bottom: 0; width: 100%;"
+                                :disabled="loadingExpand"
+                            >
+                        </div>
+                        <button type="submit" class="btn-primary" style="white-space: nowrap;" :disabled="loadingExpand">
+                            <span x-show="!loadingExpand">➕ Add to Graph</span>
+                            <span x-show="loadingExpand">Adding...</span>
+                        </button>
+                    </form>
+                </div>
+                
+                <div style="position: relative;">
+                    <div id="network-container"></div>
+                    
+                    <!-- Node Popup (Simple) -->
+                    <div x-show="selectedNode" 
+                         x-transition
+                         class="node-popup"
+                         :style="`left: ${popupPosition.x}px; top: ${popupPosition.y}px;`"
+                         @click.away="selectedNode = null">
+                        <div class="node-popup-header">Selected Address</div>
+                        <template x-if="getAddressLabel(selectedNode)">
+                            <div class="node-popup-label" x-text="getAddressLabel(selectedNode)"></div>
+                        </template>
+                        <div class="node-popup-address clickable-address" 
+                             @click="openAddressModal(selectedNode)"
+                             x-text="selectedNode ? selectedNode.substring(0, 12) + '...' + selectedNode.substring(selectedNode.length - 8) : ''"></div>
+                        <div class="node-popup-buttons">
+                            <button @click="openAddressModal(selectedNode)" 
+                                    class="node-popup-btn label">
+                                📋 View Details
+                            </button>
+                            <button @click="expandNode(selectedNode)" 
+                                    class="node-popup-btn expand"
+                                    :disabled="loadingExpand">
+                                <span x-show="!loadingExpand">🔍 Expand</span>
+                                <span x-show="loadingExpand">Loading...</span>
+                            </button>
+                            <button @click="removeNode(selectedNode)" 
+                                    class="node-popup-btn remove"
+                                    style="background: var(--error-color); color: white;">
+                                🗑️ Remove Node
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Legend -->
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-node query"></div>
+                        <span>Queried Address</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-node receiver"></div>
+                        <span>Unexpanded Node</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-node expanded"></div>
+                        <span>Expanded Node</span>
+                    </div>
+                    <div class="legend-item">
+                        <div style="width: 40px; height: 2px; background: #6366f1;"></div>
+                        <span>One-way Transfer</span>
+                    </div>
+                    <div class="legend-item">
+                        <div style="width: 40px; height: 2px; background: #10b981;"></div>
+                        <span>Bidirectional Transfer</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div x-show="hasData && !loading" class="connection-stats">
+                <div class="stat-box">
+                    <div class="label">Total Connections</div>
+                    <div class="value" x-text="stats.totalConnections"></div>
+                </div>
+                <div class="stat-box">
+                    <div class="label">Unique Addresses</div>
+                    <div class="value" x-text="stats.uniqueAddresses"></div>
+                </div>
+                <div class="stat-box">
+                    <div class="label">Total Transfers</div>
+                    <div class="value" x-text="stats.totalTransfers"></div>
+                </div>
+                <div class="stat-box">
+                    <div class="label">Total Volume</div>
+                    <div class="value" x-text="stats.totalVolume + ' TAO'"></div>
+                </div>
+            </div>
+
+            <!-- Transfers Table -->
+            <div x-show="hasData && !loading" class="card">
+                <h2>Connection Details</h2>
+                <div class="transfers-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Count</th>
+                                <th>Total Amount</th>
+                                <th>Direction</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="transfer in transfers" :key="transfer.from_address + transfer.to_address">
+                                <tr>
+                                    <td class="address-cell">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            <span class="clickable-address" 
+                                                  @click="openAddressModal(transfer.from_address)"
+                                                  x-text="transfer.from_address.substring(0, 8) + '...' + transfer.from_address.substring(transfer.from_address.length - 6)"></span>
+                                            <template x-if="getAddressLabel(transfer.from_address)">
+                                                <span class="trader-label-badge" x-text="getAddressLabel(transfer.from_address)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="address-cell">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            <span class="clickable-address" 
+                                                  @click="openAddressModal(transfer.to_address)"
+                                                  x-text="transfer.to_address.substring(0, 8) + '...' + transfer.to_address.substring(transfer.to_address.length - 6)"></span>
+                                            <template x-if="getAddressLabel(transfer.to_address)">
+                                                <span class="trader-label-badge" x-text="getAddressLabel(transfer.to_address)" style="font-size: 0.65rem; padding: 0.125rem 0.375rem;"></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td x-text="transfer.transfer_count"></td>
+                                    <td x-text="transfer.total_tao_amount.toFixed(4) + ' TAO'"></td>
+                                    <td>
+                                        <span class="direction-badge" :class="transfer.direction" x-text="transfer.direction"></span>
+                                    </td>
+                                    <td>
+                                        <button 
+                                            @click="viewTransactionDetails(transfer.from_address, transfer.to_address)"
+                                            class="btn-small btn-secondary"
+                                            style="font-size: 0.75rem; padding: 0.25rem 0.5rem; white-space: nowrap;">
+                                            📋 View Transfers
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div x-show="loading" class="card loading-spinner">
+                <div class="spinner"></div>
+                <p style="margin-top: 1rem; color: var(--text-secondary);">Loading transfer data...</p>
+            </div>
+
+            <!-- Error State -->
+            <div x-show="error" class="card empty-state" style="border-color: var(--error-color);">
+                <div class="empty-state-icon">⚠️</div>
+                <h3>Error</h3>
+                <p x-text="error"></p>
+            </div>
+        </main>
+
+        <!-- Address Modal -->
+        <div x-show="addressModalOpen" 
+             x-transition.opacity
+             class="address-modal-overlay"
+             @click.self="closeAddressModal()">
+            <div class="address-modal" @click.away="closeAddressModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">Address Details</h3>
+                    <button @click="closeAddressModal()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Full Address -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Address</div>
+                        <div class="address-modal-address">
+                            <span x-text="selectedAddress"></span>
+                            <button @click="copyAddressFromModal()" class="address-modal-copy-btn">📋 Copy</button>
+                        </div>
+                    </div>
+
+                    <!-- Label Management -->
+                    <div class="address-modal-section">
+                        <div class="address-modal-label-text">Label</div>
+                        <div x-show="!editingLabel">
+                            <div class="address-modal-label-display">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <template x-if="modalTypeCache && getModalTypeColor(modalTypeCache)">
+                                        <div :style="`width: 8px; height: 8px; border-radius: 50%; background-color: ${getModalTypeColor(modalTypeCache)}; flex-shrink: 0;`"></div>
+                                    </template>
+                                    <template x-if="modalLabelCache">
+                                        <span class="address-modal-label-badge" x-text="modalLabelCache"></span>
+                                    </template>
+                                    <template x-if="!modalLabelCache">
+                                        <span class="address-modal-no-label">No label set</span>
+                                    </template>
+                                    <template x-if="modalTypeCache">
+                                        <span style="font-size: 0.75rem; color: var(--text-tertiary);" x-text="`(${modalTypeCache})`"></span>
+                                    </template>
+                                </div>
+                                <div style="margin-left: auto;" class="address-modal-label-actions">
+                                    <button @click="startEditingLabel()" class="btn-small btn-primary">
+                                        <span x-show="!modalLabelCache">➕ Add</span>
+                                        <span x-show="modalLabelCache">✏️ Edit</span>
+                                    </button>
+                                    <template x-if="modalLabelCache">
+                                        <button @click="removeLabelFromModal()" class="btn-small btn-danger">🗑️ Remove</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div x-show="editingLabel">
+                            <div class="address-modal-label-form">
+                                <input 
+                                    type="text" 
+                                    x-model="labelInput"
+                                    @keydown.enter="saveLabelFromModal()"
+                                    @keydown.escape="cancelEditingLabel()"
+                                    class="address-modal-label-input"
+                                    placeholder="Enter label..."
+                                    x-ref="labelInput"
+                                >
+                                <select x-model="typeInput" class="address-modal-label-input" style="width: auto; min-width: 150px;">
+                                    <option value="">No type</option>
+                                    <template x-for="[typeName, color] in Object.entries(modalTypes)" :key="typeName">
+                                        <option :value="typeName" x-text="typeName"></option>
+                                    </template>
+                                </select>
+                                <button @click="saveLabelFromModal()" class="btn-small btn-primary">💾 Save</button>
+                                <button @click="cancelEditingLabel()" class="btn-small btn-secondary">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="address-modal-actions">
+                        <a :href="`/account/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-primary"
+                           target="_blank">
+                           💼 Account Page
+                        </a>
+                        <a :href="`/strategy/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🧠 Strategy
+                        </a>
+                        <a :href="`/connections/${selectedAddress}`"
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank">
+                            🔗 Connections
+                        </a>
+                        <a :href="`https://taostats.io/account/${selectedAddress}`" 
+                           class="address-modal-btn address-modal-btn-secondary"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            🌐 Taostats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edge Transfers Modal -->
+        <div x-show="edgeTransfersModalOpen" 
+             x-transition.opacity
+             class="address-modal-overlay"
+             @click.self="closeEdgeTransfersModal()">
+            <div class="address-modal" style="max-width: 900px;" @click.away="closeEdgeTransfersModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">Transfers Between Addresses</h3>
+                    <button @click="closeEdgeTransfersModal()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Addresses Info -->
+                    <div class="address-modal-section" x-show="selectedEdge">
+                        <div class="edge-addresses-info">
+                            <div class="edge-address-item">
+                                <div class="edge-address-label">From/To:</div>
+                                <div class="edge-address-value">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <span class="clickable-address" 
+                                              @click="openAddressModal(selectedEdge.from)"
+                                              x-text="selectedEdge ? selectedEdge.from : ''"></span>
+                                        <template x-if="selectedEdge && getAddressLabel(selectedEdge.from)">
+                                            <span class="trader-label-badge" x-text="getAddressLabel(selectedEdge.from)" style="font-size: 0.75rem;"></span>
+                                        </template>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span class="clickable-address" 
+                                              @click="openAddressModal(selectedEdge.to)"
+                                              x-text="selectedEdge ? selectedEdge.to : ''"></span>
+                                        <template x-if="selectedEdge && getAddressLabel(selectedEdge.to)">
+                                            <span class="trader-label-badge" x-text="getAddressLabel(selectedEdge.to)" style="font-size: 0.75rem;"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div x-show="loadingEdgeTransfers" class="edge-transfers-loading">
+                        <div class="spinner"></div>
+                        <p>Loading transfers...</p>
+                    </div>
+
+                    <!-- Error State -->
+                    <div x-show="edgeTransfersError" class="edge-transfers-error">
+                        <p x-text="edgeTransfersError"></p>
+                    </div>
+
+                    <!-- Transfers Table -->
+                    <div x-show="!loadingEdgeTransfers && !edgeTransfersError" class="address-modal-section">
+                        <div class="edge-transfers-header">
+                            <h4>Transfers (<span x-text="edgeTransfers.length"></span>)</h4>
+                        </div>
+                        
+                        <template x-if="edgeTransfers.length === 0">
+                            <div class="empty-state">
+                                <p>No transfers found between these addresses.</p>
+                            </div>
+                        </template>
+
+                        <template x-if="edgeTransfers.length > 0">
+                            <div class="edge-transfers-table-container">
+                                <table class="edge-transfers-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Date & Time</th>
+                                            <th>Netuid</th>
+                                            <th>From</th>
+                                            <th>To</th>
+                                            <th>Amount</th>
+                                            <th>Block</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="(transfer, index) in edgeTransfers" :key="transfer.id">
+                                            <tr>
+                                                <td class="edge-transfer-index" x-text="index + 1"></td>
+                                                <td class="edge-transfer-date" x-text="formatTimestamp(transfer.timestamp)"></td>
+                                                <td class="edge-transfer-netuid" x-text="transfer.netuid === -1 ? 'TAO' : transfer.netuid"></td>
+                                                <td class="edge-transfer-address">
+                                                    <span class="clickable-address" 
+                                                          @click="openAddressModal(transfer.from_address)"
+                                                          x-text="transfer.from_address.substring(0, 8) + '...' + transfer.from_address.substring(transfer.from_address.length - 6)"></span>
+                                                    <template x-if="getAddressLabel(transfer.from_address)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(transfer.from_address)" style="font-size: 0.65rem; margin-left: 0.25rem;"></span>
+                                                    </template>
+                                                </td>
+                                                <td class="edge-transfer-address">
+                                                    <span class="clickable-address" 
+                                                          @click="openAddressModal(transfer.to_address)"
+                                                          x-text="transfer.to_address.substring(0, 8) + '...' + transfer.to_address.substring(transfer.to_address.length - 6)"></span>
+                                                    <template x-if="getAddressLabel(transfer.to_address)">
+                                                        <span class="trader-label-badge" x-text="getAddressLabel(transfer.to_address)" style="font-size: 0.65rem; margin-left: 0.25rem;"></span>
+                                                    </template>
+                                                </td>
+                                                <td class="edge-transfer-amount" x-text="transfer.tao_amount.toFixed(4) + ' τ'"></td>
+                                                <td class="edge-transfer-block">
+                                                    <a :href="`https://taostats.io/extrinsic/${transfer.block_number}-${String(transfer.extrinsic_index).padStart(4, '0')}`" 
+                                                       target="_blank" 
+                                                       rel="noopener noreferrer"
+                                                       class="block-link"
+                                                       x-text="transfer.block_number"></a>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save/Load Graphs Modal -->
+        <div x-show="saveLoadModalOpen" 
+             x-transition.opacity
+             class="address-modal-overlay"
+             @click.self="closeSaveLoadModal()">
+            <div class="address-modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;" @click.away="closeSaveLoadModal()">
+                <div class="address-modal-header">
+                    <h3 class="address-modal-title">💾 Save & Load Graphs</h3>
+                    <button @click="closeSaveLoadModal()" class="address-modal-close">✕</button>
+                </div>
+                
+                <div class="address-modal-body">
+                    <!-- Save Current Graph Section -->
+                    <div class="address-modal-section" style="border-bottom: 2px solid var(--border-color); padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+                        <h4 style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">Save Current Graph</h4>
+                        <div x-show="hasData && !loading">
+                            <!-- Currently Loaded Graph Info -->
+                            <div x-show="currentLoadedGraphName" style="margin-bottom: 1rem; padding: 1rem; background: #dbeafe; border: 2px solid #3b82f6; border-radius: var(--radius-md);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                                    <div style="flex: 1;">
+                                        <div style="color: #1e40af; font-weight: 700; font-size: 0.75rem; margin-bottom: 0.25rem; letter-spacing: 0.5px;">📂 CURRENTLY LOADED</div>
+                                        <div style="color: #1e3a8a; font-weight: 700; font-size: 0.95rem;" x-text="currentLoadedGraphName"></div>
+                                    </div>
+                                    <button 
+                                        @click="saveGraphName = currentLoadedGraphName; saveCurrentGraph();" 
+                                        class="btn-small btn-primary"
+                                        :disabled="savingGraph"
+                                        style="white-space: nowrap; padding: 0.5rem 1rem;">
+                                        <span x-show="!savingGraph">⚡ Quick Save</span>
+                                        <span x-show="savingGraph">Saving...</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Current Graph Stats -->
+                            <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(0,0,0,0.05); border-radius: var(--radius-md);">
+                                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; font-size: 0.85rem;">
+                                    <div>
+                                        <div style="color: var(--text-secondary); font-weight: 500; font-size: 0.75rem; margin-bottom: 0.25rem;">Root</div>
+                                        <div style="font-weight: 600; font-family: monospace; font-size: 0.75rem;" x-text="currentAddress ? currentAddress.substring(0, 8) + '...' : ''"></div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--text-secondary); font-weight: 500; font-size: 0.75rem; margin-bottom: 0.25rem;">Nodes</div>
+                                        <div style="font-weight: 700;" x-text="nodes ? nodes.length : 0"></div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--text-secondary); font-weight: 500; font-size: 0.75rem; margin-bottom: 0.25rem;">Edges</div>
+                                        <div style="font-weight: 700;" x-text="edges ? edges.length : 0"></div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--text-secondary); font-weight: 500; font-size: 0.75rem; margin-bottom: 0.25rem;">Expanded</div>
+                                        <div style="font-weight: 700;" x-text="expandedAddresses.size"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Save Form -->
+                            <form @submit.prevent="saveCurrentGraph()" style="display: flex; gap: 0.5rem;">
+                                <input 
+                                    type="text" 
+                                    x-model="saveGraphName"
+                                    placeholder="Enter graph name..."
+                                    class="input-field"
+                                    style="flex: 1; margin-bottom: 0;"
+                                    :disabled="savingGraph"
+                                >
+                                <button type="submit" class="btn-primary" :disabled="savingGraph" style="min-width: 120px;">
+                                    <span x-show="!savingGraph && currentLoadedGraphName && saveGraphName === currentLoadedGraphName">💾 Overwrite</span>
+                                    <span x-show="!savingGraph && (!currentLoadedGraphName || saveGraphName !== currentLoadedGraphName)">💾 Save New</span>
+                                    <span x-show="savingGraph">Saving...</span>
+                                </button>
+                            </form>
+                        </div>
+                        <div x-show="!hasData || loading" style="padding: 2rem; text-align: center; color: var(--text-secondary); font-size: 0.875rem;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                            <p>No graph loaded to save</p>
+                        </div>
+                    </div>
+
+                    <!-- Saved Graphs List Section -->
+                    <div class="address-modal-section">
+                        <h4 style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">Saved Graphs (<span x-text="savedGraphs.length"></span>)</h4>
+                        
+                        <template x-if="savedGraphs.length === 0">
+                            <div style="padding: 2rem; text-align: center; color: var(--text-secondary); font-size: 0.875rem;">
+                                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                                <p>No saved graphs yet</p>
+                                <p style="font-size: 0.75rem; margin-top: 0.5rem;">Save your first graph above!</p>
+                            </div>
+                        </template>
+
+                        <template x-if="savedGraphs.length > 0">
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <template x-for="graph in savedGraphs" :key="graph.id">
+                                    <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; background: var(--bg-secondary);">
+                                        
+                                        <!-- Header with name and badge -->
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                            <h5 style="font-size: 1rem; font-weight: 700; margin: 0; color: var(--text-primary);" x-text="graph.name"></h5>
+                                            <span x-show="graph.id === currentLoadedGraphId" 
+                                                  style="background: #3b82f6; color: white; font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 0.25rem; font-weight: 700; letter-spacing: 0.5px;">
+                                                LOADED
+                                            </span>
+                                        </div>
+                                        
+                                        <!-- Timestamp -->
+                                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.75rem;" x-text="formatGraphTimestamp(graph.timestamp)"></div>
+                                        
+                                        <!-- Stats Grid -->
+                                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.05); border-radius: 0.375rem;">
+                                            <div style="font-size: 0.8rem;">
+                                                <span style="color: var(--text-secondary); font-weight: 500;">Nodes:</span> 
+                                                <strong x-text="graph.nodeCount" style="color: var(--text-primary);"></strong>
+                                            </div>
+                                            <div style="font-size: 0.8rem;">
+                                                <span style="color: var(--text-secondary); font-weight: 500;">Edges:</span> 
+                                                <strong x-text="graph.edgeCount" style="color: var(--text-primary);"></strong>
+                                            </div>
+                                        </div>
+
+                                        <!-- Root Address -->
+                                        <div style="font-size: 0.75rem; margin-bottom: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.05); border-radius: 0.375rem;">
+                                            <div style="color: var(--text-secondary); font-weight: 500; margin-bottom: 0.25rem;">Root Address:</div>
+                                            <div style="font-family: monospace; color: var(--text-primary); word-break: break-all;" x-text="graph.rootAddress"></div>
+                                        </div>
+
+                                        <!-- Action Buttons -->
+                                        <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem;">
+                                            <button 
+                                                @click="loadSavedGraph(graph.id)" 
+                                                class="btn-small btn-primary"
+                                                style="width: 100%;">
+                                                📂 Load
+                                            </button>
+                                            <button 
+                                                @click="exportGraph(graph.id)" 
+                                                class="btn-small btn-secondary"
+                                                title="Export as JSON">
+                                                💾
+                                            </button>
+                                            <button 
+                                                @click="deleteSavedGraph(graph.id, graph.name)" 
+                                                class="btn-small btn-danger">
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Storage Info -->
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); font-size: 0.8rem;">
+                        <div style="font-weight: 700; margin-bottom: 0.5rem; color: #1e40af;">ℹ️ Storage Information</div>
+                        <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.6;">
+                            <li>Graphs are saved in your browser's local storage</li>
+                            <li>Saved graphs persist across sessions</li>
+                            <li>Clearing browser data will delete saved graphs</li>
+                            <li>Export graphs to backup as JSON files</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="https://discord.gg/bittensor" target="_blank" rel="noopener noreferrer" class="footer-link">💬 Join our Discord</a>
+                    <a href="/about" class="footer-link">About Us</a>
+                    <a href="/terms" class="footer-link">Terms of Service</a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2026 AlphaStats. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/transfers.js"></script>
+</body>
+</html>
+

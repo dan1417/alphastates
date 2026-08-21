@@ -1,0 +1,810 @@
+/**
+ * Events Dashboard Styles
+ */
+
+/* Status Card */
+.status-card {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    border-left: 4px solid var(--primary-color);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.status-dot.disconnected {
+    background-color: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.status-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Loading Spinner */
+.spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Events Grid - Five Column Layout */
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.events-column {
+    min-width: 0; /* Prevent overflow */
+}
+
+/* Events Container */
+.events-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 0.25rem;
+}
+
+/* Custom Scrollbar */
+.events-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.events-container::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.events-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.events-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Block Card */
+.block-card {
+    border: 1px solid rgba(55, 65, 81, 0.5);
+    border-radius: 8px;
+    background: rgba(31, 41, 55, 0.6);
+    backdrop-filter: blur(10px);
+    margin-bottom: 0.25rem;
+    /* overflow: hidden; */
+}
+
+.block-header {
+    padding: 0.25rem 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(17, 24, 39, 0.5);
+    border-bottom: 1px solid rgba(55, 65, 81, 0.3);
+    color: #9ca3af;
+}
+
+
+.event-count {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* Events List */
+.events-list {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+}
+
+/* Event Card - Compact Single Line */
+.event-card {
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    transition: background 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #d1d5db;
+}
+
+.event-card:hover {
+    background: rgba(55, 65, 81, 0.5);
+}
+
+.event-netuid {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 0.1rem 0.3rem;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.event-card.buy .event-netuid {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.event-card.sell .event-netuid {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.event-netuid.netuid-sell {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.event-netuid.netuid-buy {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.event-amount {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: Consolas, monospace;
+    letter-spacing: 0.5px;
+    /* min-width: 80px; */
+}
+
+.event-amount.buy {
+    color: #10b981;
+}
+
+.event-amount.sell {
+    color: #ef4444;
+}
+
+.event-price {
+    font-size: 0.75rem;
+    font-family: Consolas, monospace;
+    color: #d3cccc;
+    /* min-width: 90px; */
+    margin-left: 4px;
+}
+
+.event-address {
+    flex: 1;
+    font-size: 0.8rem;
+    font-family: Consolas, monospace;
+    letter-spacing: 0.3px;
+    color: rgb(170, 170, 170);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.event-address:hover {
+    color: #d1d5db;
+}
+
+.address-label {
+    color: rgb(170, 170, 170);
+    /* font-weight: 600; */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.address-type-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.copy-btn {
+    background: transparent;
+    border: 1px solid #374151;
+    color: #9ca3af;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: all 0.15s ease;
+}
+
+.copy-btn:hover {
+    background: #374151;
+    color: #d1d5db;
+    border-color: #4b5563;
+}
+
+
+/* Transfer Event Card Styles */
+.transfer-event-card {
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    transition: background 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #d1d5db;
+}
+
+.transfer-event-card:hover {
+    background: rgba(55, 65, 81, 0.5);
+}
+
+.transfer-netuid {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 0.1rem 0.3rem;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+/* TAO transfers (netuid = -1) - Grey */
+.transfer-netuid.tao {
+    color: #9ca3af;
+    background: rgba(156, 163, 175, 0.2);
+    border: 1px solid rgba(156, 163, 175, 0.4);
+}
+
+/* Subnet transfers (netuid >= 0) - Blue */
+.transfer-netuid.subnet {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.transfer-from,
+.transfer-to {
+    flex: 1;
+    font-size: 0.8rem;
+    font-family: Consolas, monospace;
+    letter-spacing: 0.3px;
+    color: #9ca3af;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.transfer-from:hover,
+.transfer-to:hover {
+    color: #d1d5db;
+}
+
+.transfer-to {
+    padding-left: 5px;
+}
+
+.transfer-arrow {
+    font-size: 0.9rem;
+    color: #6b7280;
+    font-weight: 600;
+    letter-spacing: -6px;
+}
+
+.transfer-amount {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: Consolas, monospace;
+    letter-spacing: 0.5px;
+    text-align: right;
+}
+
+/* TAO transfer amount - Grey */
+.transfer-amount.tao {
+    color: #c7cace;
+}
+
+/* Subnet transfer amount - Blue */
+.transfer-amount.subnet {
+    color: #c7cace;
+}
+
+/* Pending mempool column: title + keep input on one line */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.section-header-row h3 {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.events-stream-header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+}
+
+/* Opp WebSocket status: visible dot + label, pulse when connected */
+.opp-ws-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+}
+.opp-ws-status.opp-ws-connected {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+}
+.opp-ws-status.opp-ws-disconnected {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.12);
+}
+.opp-ws-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.opp-ws-dot.connected {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+    animation: oppWsPulse 1.5s ease-in-out infinite;
+}
+.opp-ws-dot.disconnected {
+    background-color: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    animation: none;
+}
+@keyframes oppWsPulse {
+    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
+    50% { opacity: 0.85; transform: scale(1.1); box-shadow: 0 0 12px rgba(16, 185, 129, 0.9); }
+}
+
+.events-stream-header-right.time-elapsed-pulse {
+    background: rgba(56, 189, 248, 0.25);
+    box-shadow: 0 0 12px 2px rgba(56, 189, 248, 0.4);
+    color: #7dd3fc;
+    border-radius: 6px;
+}
+
+.section-filter-input {
+    width: 4rem;
+    min-width: 3rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.8rem;
+    background: rgba(31, 41, 55, 0.8);
+    border: 1px solid rgba(55, 65, 81, 0.6);
+    border-radius: 4px;
+    color: #d1d5db;
+}
+
+.section-filter-input::placeholder {
+    color: #6b7280;
+}
+
+.pending-mempool-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.pending-mempool-header h3 {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pending-mempool-header .status-dot {
+    flex-shrink: 0;
+}
+
+.pending-mempool-header .section-filter-input[placeholder="Keep items"] {
+    width: 2.5rem;
+}
+
+/* Pending extrinsic card (mempool) - same style as key events */
+.pending-extrinsic-card {
+    border: 1px solid rgba(55, 65, 81, 0.5);
+    border-radius: 8px;
+    background: rgba(31, 41, 55, 0.6);
+    backdrop-filter: blur(10px);
+}
+
+/* Subtle “still in mempool” indicator – left accent only, low emphasis so address/call details stay focal */
+.pending-extrinsic-card.pending-extrinsic-still-pending {
+    border-left: 3px solid rgba(34, 211, 238, 0.4);
+}
+
+/* Amount highlight: subtle warm gold tint for items above the per-section threshold */
+.item-highlight {
+    background: rgba(251, 191, 36, 0.09) !important;
+}
+
+/* Thin strip between card body and detail panel showing proxy info */
+.pending-proxy-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.18rem 0.5rem;
+    border-top: 1px solid rgba(251, 191, 36, 0.18);
+    font-size: 0.68rem;
+    color: #9ca3af;
+}
+
+.pending-proxy-badge {
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 0.08rem 0.3rem;
+    border-radius: 4px;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    color: #fbbf24;
+    flex-shrink: 0;
+    letter-spacing: 0.03em;
+}
+
+.pending-proxy-validity {
+    flex-shrink: 0;
+    font-weight: 700;
+    font-size: 0.72rem;
+}
+
+.pending-proxy-validity-valid   { color: #10b981; }
+.pending-proxy-validity-invalid { color: #ef4444; }
+.pending-proxy-validity-unknown { color: #6b7280; }
+
+.pending-proxy-address {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Highlight vulnerable pending calls (add_stake, move_stake, swap_stake without _limit) */
+.pending-extrinsic-card .event-card.pending-add-stake-call,
+.pending-extrinsic-card .transfer-event-card.pending-add-stake-call {
+    border-radius: 6px;
+}
+
+.pending-skeleton-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+    line-height: 1;
+    margin-left: 2px;
+    opacity: 0.9;
+}
+
+/* Small info icon to toggle pending call details */
+.pending-detail-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin: 0;
+    margin-left: 2px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pending-detail-icon:hover {
+    color: #9ca3af;
+    background: rgba(75, 85, 99, 0.3);
+}
+
+/* Expandable pending call details (call_module, call_function, args) */
+.pending-call-details {
+    padding: 0.35rem 0.5rem;
+    margin-top: 0.2rem;
+    background: rgba(17, 24, 39, 0.6);
+    border-top: 1px solid rgba(55, 65, 81, 0.4);
+    border-radius: 0 0 6px 6px;
+    font-size: 0.7rem;
+    color: #9ca3af;
+}
+
+.pending-call-details-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.pending-detail-label {
+    display: inline-block;
+    min-width: 5.5rem;
+    font-weight: 600;
+    color: #6b7280;
+    margin-right: 0.35rem;
+}
+
+.pending-detail-args pre {
+    margin: 0.25rem 0 0 0;
+    padding: 0.35rem;
+    background: rgba(31, 41, 55, 0.8);
+    border-radius: 4px;
+    font-size: 0.65rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #d1d5db;
+}
+
+.pending-extrinsic-inner {
+    padding: 0.2rem 0.5rem;
+    display: grid;
+    gap: 0.2rem;
+    font-size: 0.8rem;
+    color: #d1d5db;
+}
+
+.pending-type-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.1rem 0.3rem;
+    border-radius: 6px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.pending-type-badge.pending-add_stake {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.pending-type-badge.pending-remove_stake {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.pending-type-badge.pending-transfer {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.pending-address {
+    font-family: Consolas, monospace;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pending-transfer-details {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+}
+
+.pending-amount {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: Consolas, monospace;
+    color: #c7cace;
+}
+
+/* Responsive Design */
+@media (max-width: 1800px) {
+    .events-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 1400px) {
+    .events-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 1024px) {
+    .events-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .status-card > div {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .block-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .event-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .detail-value {
+        text-align: left;
+    }
+}
+
+/* Animation for new events */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.block-card {
+    animation: slideIn 0.3s ease;
+}
+
+/* Section hide button */
+.section-hide-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: #6b7280;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 0.1rem 0.4rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.section-hide-btn:hover {
+    color: #9ca3af;
+}
+
+/* ── Failed Trade Column ──────────────────────────────────────────────── */
+
+/* Error mark button — occupies the same slot as the ℹ detail icon */
+.failed-trade-error-mark {
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.15rem 0.35rem;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+/* B — Not enough Balance (red) */
+.failed-trade-mark-b {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #f87171;
+}
+.failed-trade-mark-b:hover { background: rgba(239, 68, 68, 0.28); }
+
+/* T — Slippage / Price limit (orange) */
+.failed-trade-mark-t {
+    background: rgba(249, 115, 22, 0.15);
+    border-color: rgba(249, 115, 22, 0.4);
+    color: #fb923c;
+}
+.failed-trade-mark-t:hover { background: rgba(249, 115, 22, 0.28); }
+
+/* A — Amount too low / Not enough stake (muted gray) */
+.failed-trade-mark-a {
+    background: rgba(107, 114, 128, 0.15);
+    border-color: rgba(107, 114, 128, 0.4);
+    color: #9ca3af;
+}
+.failed-trade-mark-a:hover { background: rgba(107, 114, 128, 0.28); }
+
+/* H — HotKey account not exists (purple) */
+.failed-trade-mark-h {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #a78bfa;
+}
+.failed-trade-mark-h:hover { background: rgba(139, 92, 246, 0.28); }
+
+/* Z — ZeroMaxStakeAmount (cyan) */
+.failed-trade-mark-z {
+    background: rgba(34, 211, 238, 0.12);
+    border-color: rgba(34, 211, 238, 0.35);
+    color: #67e8f9;
+}
+.failed-trade-mark-z:hover { background: rgba(34, 211, 238, 0.24); }
+
+/* Fresh (current block) — red left border, mirrors pending-extrinsic-still-pending */
+.pending-extrinsic-card.failed-trade-fresh {
+    border-left: 3px solid rgba(239, 68, 68, 0.5);
+}
+
+/* Error message block inside the expandable detail pane */
+.failed-trade-error-block {
+    padding: 0.3rem 0.4rem;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 4px;
+}
+
+.failed-trade-error-text {
+    color: #fca5a5;
+    word-break: break-word;
+    white-space: pre-wrap;
+    display: block;
+    margin-top: 0.15rem;
+    line-height: 1.4;
+}
+

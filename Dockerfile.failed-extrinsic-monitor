@@ -1,0 +1,22 @@
+# Failed Extrinsic Monitor Service Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# RUN apt-get update && apt-get install -y \
+#     gcc \
+#     g++ \
+#     && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install
+
+COPY requirements-failed-extrinsic-monitor.txt .
+RUN pip install --no-cache-dir -r requirements-failed-extrinsic-monitor.txt
+
+# RUN pip install --no-cache-dir -r requirements-failed-extrinsic-monitor.txt \
+#     && pip uninstall async-substrate-interface cyscale -y \
+#     && pip install async-substrate-interface==1.6.4
+
+COPY src/ ./src/
+
+CMD ["python", "-m", "src.failed_extrinsic_monitor.main"]
